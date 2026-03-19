@@ -1,0 +1,1202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kam's Portfolio — GS Analysis Dashboard</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg-primary: #0a0c10;
+      --bg-secondary: #111520;
+      --bg-card: #161b2e;
+      --bg-card-hover: #1c2340;
+      --gold: #c9a84c;
+      --gold-light: #e8c97a;
+      --gold-dim: #7a6130;
+      --green: #2ecc71;
+      --red: #e74c3c;
+      --text-primary: #eaf0ff;
+      --text-secondary: #8898aa;
+      --text-muted: #4a5568;
+      --border: #1e2a45;
+      --border-gold: #3a3020;
+      --accent-blue: #3b82f6;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    /* HEADER */
+    .header {
+      background: linear-gradient(135deg, #0d1117 0%, #161b2e 100%);
+      border-bottom: 1px solid var(--border-gold);
+      padding: 16px 32px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .header-left { display: flex; align-items: center; gap: 16px; }
+    .gs-badge {
+      background: var(--gold);
+      color: #000;
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 1.5px;
+      padding: 3px 8px;
+      border-radius: 2px;
+      text-transform: uppercase;
+    }
+    .header-title { font-size: 20px; font-weight: 700; color: var(--text-primary); }
+    .header-subtitle { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+    .header-right { display: flex; align-items: center; gap: 16px; }
+    .refresh-btn {
+      background: transparent;
+      border: 1px solid var(--gold-dim);
+      color: var(--gold);
+      padding: 6px 14px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+      transition: all 0.2s;
+    }
+    .refresh-btn:hover { background: var(--gold-dim); }
+    .last-updated { font-size: 11px; color: var(--text-secondary); }
+    .loading-indicator {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--gold);
+    }
+    .spinner {
+      width: 14px; height: 14px;
+      border: 2px solid var(--gold-dim);
+      border-top-color: var(--gold);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* MAIN LAYOUT */
+    .main { padding: 24px 32px; max-width: 1600px; margin: 0 auto; }
+    .section-title {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--gold);
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .section-title::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    /* SUMMARY CARDS */
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    .summary-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      transition: border-color 0.2s;
+    }
+    .summary-card:hover { border-color: var(--gold-dim); }
+    .summary-card.primary { border-color: var(--gold-dim); }
+    .card-label { font-size: 10px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+    .card-value { font-size: 22px; font-weight: 700; color: var(--text-primary); }
+    .card-sub { font-size: 11px; margin-top: 4px; }
+    .positive { color: var(--green); }
+    .negative { color: var(--red); }
+    .neutral { color: var(--text-secondary); }
+
+    /* TWO COLUMN LAYOUT */
+    .two-col { display: grid; grid-template-columns: 380px 1fr; gap: 20px; margin-bottom: 24px; }
+    .three-col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; margin-bottom: 24px; }
+
+    /* CARDS */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
+    }
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    /* CHART */
+    .chart-wrapper { position: relative; height: 280px; display: flex; align-items: center; justify-content: center; }
+    .chart-legend {
+      margin-top: 12px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+    .legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; }
+    .legend-dot { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+
+    /* GS ANALYSIS */
+    .gs-analysis-card { background: var(--bg-card); border: 1px solid var(--border-gold); border-radius: 8px; padding: 20px; }
+    .gs-header { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+    .gs-label { font-size: 10px; font-weight: 800; letter-spacing: 2px; color: var(--gold); text-transform: uppercase; }
+    .gs-analyst { font-size: 12px; color: var(--text-secondary); }
+    .gs-section { margin-bottom: 16px; }
+    .gs-section-title { font-size: 11px; font-weight: 700; color: var(--gold-light); margin-bottom: 8px; }
+    .gs-text { font-size: 12px; color: var(--text-secondary); line-height: 1.7; }
+    .gs-rec {
+      background: #0d1a10;
+      border-left: 3px solid var(--green);
+      padding: 10px 12px;
+      border-radius: 0 4px 4px 0;
+      margin-bottom: 8px;
+      font-size: 12px;
+      color: var(--text-primary);
+    }
+    .gs-rec.warning { background: #1a1200; border-left-color: var(--gold); }
+    .gs-rec.risk { background: #1a0800; border-left-color: var(--red); }
+    .gs-rec-title { font-weight: 700; font-size: 11px; margin-bottom: 3px; }
+    .gs-rec-body { color: var(--text-secondary); line-height: 1.5; }
+    .rating-badge {
+      display: inline-block;
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: 1px;
+      padding: 2px 6px;
+      border-radius: 2px;
+      margin-left: 6px;
+    }
+    .rating-ob { background: #0d3321; color: var(--green); }
+    .rating-n { background: #1a1a0a; color: var(--gold); }
+    .rating-uw { background: #2a0a0a; color: var(--red); }
+
+    /* HOLDINGS TABLE */
+    .holdings-filter {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+    .filter-btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      padding: 4px 12px;
+      border-radius: 20px;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 600;
+      transition: all 0.2s;
+    }
+    .filter-btn.active, .filter-btn:hover {
+      background: var(--gold-dim);
+      border-color: var(--gold);
+      color: var(--gold-light);
+    }
+    .table-wrapper { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; }
+    thead th {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+      padding: 8px 12px;
+      text-align: right;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    thead th:first-child, thead th:nth-child(2) { text-align: left; }
+    tbody tr {
+      border-bottom: 1px solid rgba(30, 42, 69, 0.5);
+      transition: background 0.15s;
+    }
+    tbody tr:hover { background: var(--bg-card-hover); }
+    tbody td {
+      padding: 10px 12px;
+      font-size: 12px;
+      text-align: right;
+      white-space: nowrap;
+    }
+    tbody td:first-child, tbody td:nth-child(2) { text-align: left; }
+    .symbol-cell { display: flex; align-items: center; gap: 8px; }
+    .symbol-badge {
+      font-weight: 800;
+      font-size: 12px;
+      color: var(--text-primary);
+      min-width: 50px;
+    }
+    .cat-badge {
+      font-size: 9px;
+      font-weight: 600;
+      padding: 2px 6px;
+      border-radius: 3px;
+      letter-spacing: 0.5px;
+    }
+    .cat-broad { background: #0d2040; color: #5b9bd5; }
+    .cat-gold { background: #2a1a00; color: var(--gold); }
+    .cat-silver { background: #1a1a2a; color: #a0a0cc; }
+    .cat-energy { background: #002a1a; color: #40cc80; }
+    .cat-tech { background: #0d0030; color: #8060cc; }
+    .cat-canada { background: #200010; color: #cc4060; }
+    .cat-crypto { background: #200020; color: #cc60cc; }
+    .cat-thematic { background: #001a2a; color: #40aabb; }
+    .cat-uranium { background: #1a2000; color: #a0cc40; }
+    .cat-individual { background: #1a1a1a; color: #888; }
+    .name-cell { font-size: 11px; color: var(--text-secondary); max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
+    .loading-cell { color: var(--text-muted); font-style: italic; }
+    .weight-bar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      justify-content: flex-end;
+    }
+    .weight-fill {
+      height: 4px;
+      border-radius: 2px;
+      background: var(--gold-dim);
+    }
+    .account-tag { font-size: 9px; color: var(--text-muted); font-weight: 600; letter-spacing: 0.5px; }
+
+    /* MACRO */
+    .macro-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px; }
+    .macro-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .macro-label { font-size: 10px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
+    .macro-value { font-size: 18px; font-weight: 700; }
+    .macro-change { font-size: 11px; margin-top: 2px; }
+    .macro-icon { font-size: 24px; opacity: 0.6; }
+
+    /* NEWS */
+    .news-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; margin-bottom: 24px; }
+    .news-feed { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+    .news-item {
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+    }
+    .news-item:last-child { border-bottom: none; }
+    .news-item:hover .news-headline { color: var(--gold-light); }
+    .news-headline { font-size: 12px; color: var(--text-primary); line-height: 1.5; margin-bottom: 4px; transition: color 0.2s; }
+    .news-meta { font-size: 10px; color: var(--text-muted); }
+    .news-source { color: var(--gold-dim); font-weight: 600; }
+    .news-placeholder { color: var(--text-muted); font-size: 12px; font-style: italic; padding: 12px 0; }
+
+    /* FOOTER */
+    .footer {
+      text-align: center;
+      padding: 24px;
+      color: var(--text-muted);
+      font-size: 10px;
+      border-top: 1px solid var(--border);
+      margin-top: 8px;
+    }
+
+    /* TABS */
+    .tab-bar { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+    .tab {
+      padding: 8px 16px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: all 0.2s;
+    }
+    .tab.active { color: var(--gold); border-bottom-color: var(--gold); }
+    .tab:hover { color: var(--text-primary); }
+
+    /* TOOLTIP */
+    [title] { cursor: help; }
+
+    /* Responsive */
+    @media (max-width: 1200px) {
+      .summary-grid { grid-template-columns: repeat(3, 1fr); }
+      .two-col { grid-template-columns: 1fr; }
+      .news-grid { grid-template-columns: 1fr 1fr; }
+      .macro-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+  </style>
+</head>
+<body>
+
+<div id="localFileBanner" style="display:none;background:#1a0e00;border-bottom:1px solid #7a6130;padding:10px 32px;font-size:12px;color:#c9a84c;text-align:center;">
+  ⚠️ <strong>Live prices require HTTPS.</strong> You're viewing this as a local file — prices won't load. Upload to GitHub Pages and open via <code>https://yourusername.github.io/dashboard.html</code> for full functionality.
+</div>
+
+<div class="header">
+  <div class="header-left">
+    <div>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span class="gs-badge">Goldman Sachs Desk</span>
+        <div class="header-title">Kam's Portfolio Intelligence</div>
+      </div>
+      <div class="header-subtitle">Consolidated view · TFSA · RRSP · Non-Reg · Crypto</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="loading-indicator" id="loadingIndicator">
+      <div class="spinner"></div>
+      <span>Fetching live data...</span>
+    </div>
+    <div class="last-updated" id="lastUpdated">Loading...</div>
+    <button class="refresh-btn" onclick="refreshAll()">↻ Refresh</button>
+  </div>
+</div>
+
+<div class="main">
+
+  <!-- SUMMARY CARDS -->
+  <div class="section-title">Portfolio Summary</div>
+  <div class="summary-grid">
+    <div class="summary-card primary">
+      <div class="card-label">Total Portfolio (CAD est.)</div>
+      <div class="card-value" id="totalValue">—</div>
+      <div class="card-sub" id="totalDayChange">Loading prices...</div>
+    </div>
+    <div class="summary-card">
+      <div class="card-label">TFSA (CAD)</div>
+      <div class="card-value" id="tfsaValue">—</div>
+      <div class="card-sub neutral" id="tfsaCount">— positions</div>
+    </div>
+    <div class="summary-card">
+      <div class="card-label">RRSP (CAD)</div>
+      <div class="card-value" id="rrspValue">—</div>
+      <div class="card-sub neutral" id="rrspCount">— positions</div>
+    </div>
+    <div class="summary-card">
+      <div class="card-label">Crypto (CAD est.)</div>
+      <div class="card-value" id="cryptoValue">—</div>
+      <div class="card-sub neutral">BTC · ETH · SOL · AAVE</div>
+    </div>
+    <div class="summary-card">
+      <div class="card-label">Precious Metals Exposure</div>
+      <div class="card-value" id="metalsValue">—</div>
+      <div class="card-sub neutral" id="metalsPct">Gold · Silver · Miners</div>
+    </div>
+  </div>
+
+  <!-- ALLOCATION CHART + GS ANALYSIS -->
+  <div class="two-col" style="margin-bottom:24px;">
+    <div class="card">
+      <div class="section-title" style="margin-bottom:12px;">Asset Allocation</div>
+      <div class="chart-wrapper">
+        <canvas id="allocationChart"></canvas>
+      </div>
+      <div class="chart-legend" id="chartLegend"></div>
+    </div>
+
+    <div class="gs-analysis-card">
+      <div class="gs-header">
+        <span class="gs-badge">GS</span>
+        <div>
+          <div class="gs-label">Portfolio Review</div>
+          <div class="gs-analyst" id="gsDate">GS Investment Intelligence · March 2026</div>
+        </div>
+      </div>
+
+      <div class="gs-section">
+        <div class="gs-section-title">📊 Portfolio Thesis</div>
+        <div class="gs-text" id="gsThesis">Loading analysis...</div>
+      </div>
+
+      <div class="gs-section">
+        <div class="gs-section-title">⚡ Active Recommendations</div>
+        <div id="gsRecs">Loading recommendations...</div>
+      </div>
+
+      <div class="gs-section">
+        <div class="gs-section-title">⚠️ Risk Flags</div>
+        <div id="gsRisks">Loading risk analysis...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MACRO INDICATORS -->
+  <div class="section-title">Macro Indicators</div>
+  <div class="macro-grid" id="macroGrid">
+    <div class="macro-card"><div><div class="macro-label">Gold (XAU/USD)</div><div class="macro-value" id="goldPrice">—</div><div class="macro-change" id="goldChange">—</div></div><div class="macro-icon">🥇</div></div>
+    <div class="macro-card"><div><div class="macro-label">Silver (XAG/USD)</div><div class="macro-value" id="silverPrice">—</div><div class="macro-change" id="silverChange">—</div></div><div class="macro-icon">🥈</div></div>
+    <div class="macro-card"><div><div class="macro-label">Bitcoin (CAD)</div><div class="macro-value" id="btcPrice">—</div><div class="macro-change" id="btcChange">—</div></div><div class="macro-icon">₿</div></div>
+    <div class="macro-card"><div><div class="macro-label">S&P 500</div><div class="macro-value" id="sp500Price">—</div><div class="macro-change" id="sp500Change">—</div></div><div class="macro-icon">📈</div></div>
+    <div class="macro-card"><div><div class="macro-label">USD/CAD</div><div class="macro-value" id="usdcadPrice">—</div><div class="macro-change" id="usdcadChange">—</div></div><div class="macro-icon">💱</div></div>
+    <div class="macro-card"><div><div class="macro-label">TSX Composite</div><div class="macro-value" id="tsxPrice">—</div><div class="macro-change" id="tsxChange">—</div></div><div class="macro-icon">🍁</div></div>
+    <div class="macro-card"><div><div class="macro-label">Crude Oil (WTI)</div><div class="macro-value" id="oilPrice">—</div><div class="macro-change" id="oilChange">—</div></div><div class="macro-icon">🛢️</div></div>
+    <div class="macro-card"><div><div class="macro-label">Copper (HG)</div><div class="macro-value" id="copperPrice">—</div><div class="macro-change" id="copperChange">—</div></div><div class="macro-icon">🔶</div></div>
+  </div>
+
+  <!-- HOLDINGS TABLE -->
+  <div class="section-title">Holdings</div>
+  <div class="card" style="margin-bottom:24px;">
+    <div class="holdings-filter">
+      <button class="filter-btn active" onclick="filterHoldings('all', this)">All Accounts</button>
+      <button class="filter-btn" onclick="filterHoldings('TFSA', this)">TFSA</button>
+      <button class="filter-btn" onclick="filterHoldings('RRSP', this)">RRSP</button>
+      <button class="filter-btn" onclick="filterHoldings('Crypto', this)">Crypto</button>
+      <button class="filter-btn" onclick="filterHoldings('Precious Metals', this)">Precious Metals</button>
+      <button class="filter-btn" onclick="filterHoldings('Tech', this)">Tech</button>
+    </div>
+    <div class="table-wrapper">
+      <table id="holdingsTable">
+        <thead>
+          <tr>
+            <th>Symbol</th>
+            <th>Name</th>
+            <th>Account</th>
+            <th>Qty</th>
+            <th>Price</th>
+            <th>Value (CAD)</th>
+            <th>Day Chg</th>
+            <th>Day Chg %</th>
+            <th>Portfolio %</th>
+          </tr>
+        </thead>
+        <tbody id="holdingsBody">
+          <tr><td colspan="9" class="loading-cell" style="text-align:center;padding:24px;">Loading holdings data...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- NEWS FEEDS -->
+  <div class="section-title">Market Intelligence</div>
+  <div class="news-grid">
+    <div class="news-feed">
+      <div class="card-header" style="margin-bottom:12px;">
+        <div style="font-size:12px;font-weight:700;color:var(--gold)">🥇 Precious Metals & Macro</div>
+      </div>
+      <div id="newsMetals"><div class="news-placeholder">Loading news...</div></div>
+    </div>
+    <div class="news-feed">
+      <div class="card-header" style="margin-bottom:12px;">
+        <div style="font-size:12px;font-weight:700;color:var(--gold)">₿ Crypto & Digital Assets</div>
+      </div>
+      <div id="newsCrypto"><div class="news-placeholder">Loading news...</div></div>
+    </div>
+    <div class="news-feed">
+      <div class="card-header" style="margin-bottom:12px;">
+        <div style="font-size:12px;font-weight:700;color:var(--gold)">⚡ Energy & Resources</div>
+      </div>
+      <div id="newsEnergy"><div class="news-placeholder">Loading news...</div></div>
+    </div>
+  </div>
+
+</div>
+
+<div class="footer">
+  GS Portfolio Intelligence Dashboard · Data sourced from Yahoo Finance & CoinGecko · For informational purposes only · Not financial advice<br>
+  Positions derived from WealthSimple activity export · Prices refresh on page load · Last refreshed: <span id="footerTime">—</span>
+</div>
+
+<script>
+// ============================================================
+// PORTFOLIO DATA — Derived from WealthSimple Activity Export
+// ============================================================
+const HOLDINGS = [
+  // ── TFSA CAD (HF99363K8CAD) ── Broad Market
+  { symbol:'VFV',   yahoo:'VFV.TO',   name:'Vanguard S&P 500 ETF',                  qty:20.000,  currency:'CAD', account:'TFSA',   cat:'Broad Market', catKey:'broad' },
+  { symbol:'XUU',   yahoo:'XUU.TO',   name:'iShares Core S&P US Total Mkt',         qty:20.000,  currency:'CAD', account:'TFSA',   cat:'Broad Market', catKey:'broad' },
+  { symbol:'QQQ',   yahoo:'QQQ',      name:'Invesco QQQ Trust (NASDAQ 100)',         qty:6.9999,  currency:'USD', account:'TFSA',   cat:'Tech/Growth',  catKey:'tech' },
+  { symbol:'XIC',   yahoo:'XIC.TO',   name:'iShares Core S&P/TSX Composite',        qty:20.000,  currency:'CAD', account:'TFSA',   cat:'Canada',       catKey:'canada' },
+
+  // ── TFSA CAD — Precious Metals
+  { symbol:'OUNZ',  yahoo:'OUNZ',     name:'VanEck Merk Gold Trust',                qty:45.000,  currency:'USD', account:'TFSA',   cat:'Gold',         catKey:'gold' },
+  { symbol:'SLV',   yahoo:'SLV',      name:'iShares Silver Trust',                  qty:4.000,   currency:'USD', account:'TFSA',   cat:'Silver',       catKey:'silver' },
+  { symbol:'COPX',  yahoo:'COPX',     name:'Global X Copper ETF',                   qty:2.000,   currency:'USD', account:'TFSA',   cat:'Copper',       catKey:'gold' },
+  { symbol:'ICOP',  yahoo:'ICOP',     name:'iShares Copper & Metals Mining ETF',    qty:2.000,   currency:'USD', account:'TFSA',   cat:'Copper',       catKey:'gold' },
+
+  // ── TFSA CAD — Energy Transition
+  { symbol:'HCLN',  yahoo:'HCLN.TO',  name:'Harvest Clean Energy ETF',              qty:13.000,  currency:'CAD', account:'TFSA',   cat:'Clean Energy', catKey:'energy' },
+  { symbol:'BATT',  yahoo:'BATT',     name:'Amplify Lithium & Battery Tech ETF',    qty:5.000,   currency:'USD', account:'TFSA',   cat:'Battery/EV',   catKey:'energy' },
+  { symbol:'ION',   yahoo:'ION',      name:'ProShares S&P Global Core Battery ETF', qty:4.000,   currency:'USD', account:'TFSA',   cat:'Battery/EV',   catKey:'energy' },
+  { symbol:'HLIT',  yahoo:'HLIT.TO',  name:'Global X Lithium Producers Index ETF',  qty:5.000,   currency:'CAD', account:'TFSA',   cat:'Battery/EV',   catKey:'energy' },
+  { symbol:'NLR',   yahoo:'NLR',      name:'VanEck Uranium + Nuclear ETF',          qty:5.000,   currency:'USD', account:'TFSA',   cat:'Uranium/Nuclear', catKey:'uranium' },
+  { symbol:'SASK',  yahoo:'SASK.V',   name:'Atha Energy Corp (Uranium)',             qty:100.000, currency:'CAD', account:'TFSA',   cat:'Uranium/Nuclear', catKey:'uranium' },
+
+  // ── TFSA CAD — Tech
+  { symbol:'NVDA',  yahoo:'NVDA',     name:'NVIDIA Corp',                           qty:10.000,  currency:'USD', account:'TFSA',   cat:'Tech/Growth',  catKey:'tech' },
+  { symbol:'AMZN',  yahoo:'AMZN',     name:'Amazon.com Inc.',                       qty:4.000,   currency:'USD', account:'TFSA',   cat:'Tech/Growth',  catKey:'tech' },
+  { symbol:'GOOG',  yahoo:'GOOG',     name:'Alphabet Inc.',                         qty:1.000,   currency:'USD', account:'TFSA',   cat:'Tech/Growth',  catKey:'tech' },
+  { symbol:'MSFT',  yahoo:'MSFT',     name:'Microsoft Corp.',                       qty:1.000,   currency:'USD', account:'TFSA',   cat:'Tech/Growth',  catKey:'tech' },
+  { symbol:'SHOP',  yahoo:'SHOP.TO',  name:'Shopify Inc.',                          qty:2.000,   currency:'CAD', account:'TFSA',   cat:'Tech/Growth',  catKey:'tech' },
+  { symbol:'CIBR',  yahoo:'CIBR',     name:'First Trust Nasdaq Cybersecurity ETF',  qty:9.000,   currency:'USD', account:'TFSA',   cat:'Cybersecurity', catKey:'tech' },
+  { symbol:'ARKK',  yahoo:'ARKK.TO',  name:'BMO ARK Innovation Fund',               qty:3.000,   currency:'CAD', account:'TFSA',   cat:'Innovation',   catKey:'tech' },
+
+  // ── TFSA CAD — Individual / Other
+  { symbol:'COST',  yahoo:'COST',     name:'Costco CDR (CAD Hedged)',                qty:5.000,   currency:'USD', account:'TFSA',   cat:'Consumer',     catKey:'individual' },
+  { symbol:'BA',    yahoo:'BA',       name:'Boeing Co.',                            qty:1.000,   currency:'USD', account:'TFSA',   cat:'Aerospace',    catKey:'individual' },
+  { symbol:'BCE',   yahoo:'BCE.TO',   name:'BCE Inc.',                              qty:1.000,   currency:'CAD', account:'TFSA',   cat:'Telecom',      catKey:'individual' },
+  { symbol:'CJT',   yahoo:'CJT.TO',   name:'Cargojet Inc.',                         qty:1.000,   currency:'CAD', account:'TFSA',   cat:'Transport',    catKey:'individual' },
+  { symbol:'BYND',  yahoo:'BYND',     name:'Beyond Meat Inc.',                      qty:1.000,   currency:'USD', account:'TFSA',   cat:'Consumer',     catKey:'individual' },
+  { symbol:'KVUE',  yahoo:'KVUE',     name:'Kenvue Inc.',                           qty:1.000,   currency:'USD', account:'TFSA',   cat:'Consumer',     catKey:'individual' },
+  { symbol:'CASH',  yahoo:'CASH.TO',  name:'Global X High Interest Savings ETF',   qty:1.000,   currency:'CAD', account:'TFSA',   cat:'Cash/Fixed',   catKey:'broad' },
+  { symbol:'PSYK',  yahoo:'PSYK.TO',  name:'Horizons Psychedelic Stock Index ETF',  qty:2.250,   currency:'CAD', account:'TFSA',   cat:'Thematic',     catKey:'thematic' },
+
+  // ── RRSP (HQ654TL40CAD)
+  { symbol:'VFV',   yahoo:'VFV.TO',   name:'Vanguard S&P 500 ETF',                  qty:8.939,   currency:'CAD', account:'RRSP',   cat:'Broad Market', catKey:'broad' },
+  { symbol:'XUU',   yahoo:'XUU.TO',   name:'iShares Core S&P US Total Mkt',         qty:19.601,  currency:'CAD', account:'RRSP',   cat:'Broad Market', catKey:'broad' },
+  { symbol:'XGD',   yahoo:'XGD.TO',   name:'iShares S&P/TSX Global Gold ETF',       qty:6.108,   currency:'CAD', account:'RRSP',   cat:'Gold Miners',  catKey:'gold' },
+
+  // ── CRYPTO (HH9155511CAD)
+  { symbol:'AAVE',  yahoo:null,       name:'Aave (DeFi Protocol)',                  qty:1.7405,  currency:'CAD', account:'Crypto', cat:'DeFi/Crypto',  catKey:'crypto', cgId:'aave' },
+  { symbol:'ETH',   yahoo:null,       name:'Ethereum',                              qty:0.0529,  currency:'CAD', account:'Crypto', cat:'DeFi/Crypto',  catKey:'crypto', cgId:'ethereum' },
+  { symbol:'SOL',   yahoo:null,       name:'Solana',                                qty:1.7789,  currency:'CAD', account:'Crypto', cat:'DeFi/Crypto',  catKey:'crypto', cgId:'solana' },
+];
+
+// Macro tickers
+const MACRO_TICKERS = {
+  gold:    { yahoo:'GC=F',    label:'Gold',          icon:'🥇', elementId:'gold' },
+  silver:  { yahoo:'SI=F',    label:'Silver',        icon:'🥈', elementId:'silver' },
+  sp500:   { yahoo:'^GSPC',   label:'S&P 500',       icon:'📈', elementId:'sp500' },
+  usdcad:  { yahoo:'USDCAD=X',label:'USD/CAD',       icon:'💱', elementId:'usdcad' },
+  tsx:     { yahoo:'^OSPTX',  label:'TSX',           icon:'🍁', elementId:'tsx' },
+  oil:     { yahoo:'CL=F',    label:'Crude Oil',     icon:'🛢️', elementId:'oil' },
+  copper:  { yahoo:'HG=F',    label:'Copper',        icon:'🔶', elementId:'copper' },
+};
+
+// ============================================================
+// STATE
+// ============================================================
+let priceMap = {};       // symbol → { price, prevClose, currency }
+let usdcadRate = 1.39;   // fallback
+let currentFilter = 'all';
+let allocationChart = null;
+let cryptoPrices = {};   // cgId → { cad, usd, change_pct }
+
+// ============================================================
+// UTILITIES
+// ============================================================
+const fmtCAD = (v, dec=0) => v != null && !isNaN(v)
+  ? '$' + v.toLocaleString('en-CA', {minimumFractionDigits:dec, maximumFractionDigits:dec})
+  : '—';
+
+const fmtPct = (v) => v != null && !isNaN(v)
+  ? (v >= 0 ? '+' : '') + v.toFixed(2) + '%'
+  : '—';
+
+const colorPct = (v) => v == null || isNaN(v) ? '' : v >= 0 ? 'positive' : 'negative';
+
+function getHoldingPrice(h) {
+  // Returns price in CAD
+  const p = priceMap[h.symbol + '_' + h.account] || priceMap[h.symbol];
+  if (!p) return null;
+  if (h.currency === 'USD') return p.price * usdcadRate;
+  return p.price;
+}
+
+function getHoldingPrevClose(h) {
+  const p = priceMap[h.symbol + '_' + h.account] || priceMap[h.symbol];
+  if (!p) return null;
+  if (h.currency === 'USD') return p.prevClose * usdcadRate;
+  return p.prevClose;
+}
+
+function getHoldingValue(h) {
+  if (h.cgId) {
+    const cp = cryptoPrices[h.cgId];
+    if (!cp) return null;
+    return h.qty * cp.cad;
+  }
+  const price = getHoldingPrice(h);
+  if (price == null) return null;
+  return h.qty * price;
+}
+
+// ============================================================
+// FETCH: Yahoo Finance — multi-proxy fallback chain
+// ============================================================
+const PROXIES = [
+  (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+  (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+  (url) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+];
+
+async function fetchWithFallback(targetUrl) {
+  // 1. Try direct (works on GitHub Pages over https)
+  if (window.location.protocol === 'https:') {
+    try {
+      const res = await fetch(targetUrl, { cache:'no-store' });
+      if (res.ok) return res;
+    } catch(_) {}
+  }
+  // 2. Try each proxy in sequence
+  for (const makeProxy of PROXIES) {
+    try {
+      const res = await fetch(makeProxy(targetUrl), { cache:'no-store' });
+      if (res.ok) return res;
+    } catch(_) {}
+  }
+  throw new Error('All proxies failed for: ' + targetUrl);
+}
+
+// ============================================================
+// FETCH: Yahoo Finance Chart API (confirmed working via corsproxy.io)
+// Uses /v8/finance/chart per symbol — works for TSX + US symbols
+// Stooq used only for macro commodities (gold, silver, oil, etc.)
+// ============================================================
+
+// Confirmed working proxy from live testing
+const CORSPROXY = url => `https://corsproxy.io/?${encodeURIComponent(url)}`;
+
+async function fetchYahooChart(symbol) {
+  const url = `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=2d&includePrePost=false`;
+  try {
+    const res = await fetch(CORSPROXY(url), { cache:'no-store' });
+    if (!res.ok) return false;
+    const data = await res.json();
+    const meta = data?.chart?.result?.[0]?.meta;
+    if (!meta?.regularMarketPrice) return false;
+    priceMap[symbol] = {
+      price:     meta.regularMarketPrice,
+      prevClose: meta.chartPreviousClose ?? null,
+      currency:  meta.currency ?? 'USD',
+    };
+    return true;
+  } catch(e) {
+    return false;
+  }
+}
+
+// Stooq for macro only — confirmed working for commodities & FX
+const STOOQ_MACRO = {
+  'GC=F':'gc.f', 'SI=F':'si.f', 'CL=F':'cl.f', 'HG=F':'hg.f',
+  '^GSPC':'^spx', '^OSPTX':'^tsx', 'USDCAD=X':'usdcad',
+};
+
+async function fetchStooqMacro() {
+  await Promise.allSettled(Object.entries(STOOQ_MACRO).map(async ([yahooSym, stooqSym]) => {
+    const url = `https://stooq.com/q/l/?s=${stooqSym}&f=sd2c&h&e=csv`;
+    try {
+      const res = await fetch(CORSPROXY(url), { cache:'no-store' });
+      const text = await res.text();
+      const lines = text.trim().split('\n');
+      if (lines.length < 2) return;
+      const parts = lines[1].split(',');
+      const price = parseFloat(parts[2]);
+      if (!isNaN(price) && price > 0) {
+        priceMap[yahooSym] = { price, prevClose: null, currency: 'USD' };
+      }
+    } catch(e) {}
+  }));
+}
+
+async function fetchAllPrices() {
+  const holdingSymbols = [...new Set(HOLDINGS.filter(h => h.yahoo).map(h => h.yahoo))];
+
+  // Fetch all holdings in parallel batches of 8
+  const batches = [];
+  for (let i = 0; i < holdingSymbols.length; i += 8) {
+    batches.push(holdingSymbols.slice(i, i + 8));
+  }
+  for (const batch of batches) {
+    await Promise.allSettled(batch.map(sym => fetchYahooChart(sym)));
+  }
+
+  // Macro commodities via Stooq (in parallel with holdings)
+  await fetchStooqMacro();
+
+  // USD/CAD rate
+  const usdcad = priceMap['USDCAD=X'];
+  if (usdcad?.price) usdcadRate = usdcad.price;
+
+  // BTC/CAD from CoinGecko
+  const btc = cryptoPrices['bitcoin'];
+  if (btc?.cad) {
+    priceMap['BTC-CAD'] = {
+      price:     btc.cad,
+      prevClose: btc.change_pct != null ? btc.cad / (1 + btc.change_pct / 100) : null,
+      currency:  'CAD',
+    };
+  }
+}
+
+// ============================================================
+// FETCH: CoinGecko for crypto prices in CAD — with proxy fallback
+// ============================================================
+async function fetchCryptoPrices() {
+  const ids = [...new Set(HOLDINGS.filter(h => h.cgId).map(h => h.cgId))];
+  if (!ids.length) return;
+  const cgUrl = `https://api.coingecko.com/api/v3/simple/price?ids=${ids.join(',')}&vs_currencies=cad,usd&include_24hr_change=true`;
+  try {
+    const res = await fetchWithFallback(cgUrl);
+    const data = await res.json();
+    ids.forEach(id => {
+      if (data[id]) {
+        cryptoPrices[id] = {
+          cad:        data[id].cad,
+          usd:        data[id].usd,
+          change_pct: data[id].cad_24h_change,
+        };
+      }
+    });
+  } catch(e) {
+    console.warn('CoinGecko failed (all proxies):', e.message);
+  }
+}
+
+// ============================================================
+// RENDER: Summary Cards
+// ============================================================
+function renderSummary() {
+  const tfsaHoldings = HOLDINGS.filter(h => h.account === 'TFSA');
+  const rrspHoldings = HOLDINGS.filter(h => h.account === 'RRSP');
+  const cryptoHoldings = HOLDINGS.filter(h => h.account === 'Crypto');
+  const metalsHoldings = HOLDINGS.filter(h => ['Gold','Silver','Copper','Gold Miners'].includes(h.cat));
+
+  const sumValues = (arr) => {
+    let total = 0, hasAny = false;
+    arr.forEach(h => {
+      const v = getHoldingValue(h);
+      if (v != null) { total += v; hasAny = true; }
+    });
+    return hasAny ? total : null;
+  };
+
+  const tfsaVal  = sumValues(tfsaHoldings);
+  const rrspVal  = sumValues(rrspHoldings);
+  const cryptoVal = sumValues(cryptoHoldings);
+  const metalsVal = sumValues(metalsHoldings);
+  const totalVal = (tfsaVal ?? 0) + (rrspVal ?? 0) + (cryptoVal ?? 0);
+
+  // Day change
+  let totalDayChg = 0;
+  HOLDINGS.forEach(h => {
+    const price = h.cgId ? cryptoPrices[h.cgId]?.cad : getHoldingPrice(h);
+    const prev  = h.cgId ? null : getHoldingPrevClose(h);
+    if (price && prev) totalDayChg += h.qty * (price - prev);
+    else if (h.cgId && cryptoPrices[h.cgId]) {
+      const cp = cryptoPrices[h.cgId];
+      if (cp.change_pct != null) {
+        const prevCad = cp.cad / (1 + cp.change_pct / 100);
+        totalDayChg += h.qty * (cp.cad - prevCad);
+      }
+    }
+  });
+
+  document.getElementById('totalValue').textContent = totalVal ? fmtCAD(totalVal) : '—';
+  const chgEl = document.getElementById('totalDayChange');
+  chgEl.textContent = totalDayChg ? fmtCAD(totalDayChg) + ' today' : 'Prices loading...';
+  chgEl.className = 'card-sub ' + (totalDayChg >= 0 ? 'positive' : 'negative');
+
+  document.getElementById('tfsaValue').textContent  = tfsaVal  ? fmtCAD(tfsaVal)  : '—';
+  document.getElementById('rrspValue').textContent  = rrspVal  ? fmtCAD(rrspVal)  : '—';
+  document.getElementById('cryptoValue').textContent = cryptoVal ? fmtCAD(cryptoVal) : '—';
+  document.getElementById('metalsValue').textContent = metalsVal ? fmtCAD(metalsVal) : '—';
+
+  const tfsaCount = tfsaHoldings.length;
+  document.getElementById('tfsaCount').textContent = tfsaCount + ' positions';
+  document.getElementById('rrspCount').textContent = rrspHoldings.length + ' positions';
+  if (metalsVal && totalVal) {
+    document.getElementById('metalsPct').textContent = (metalsVal / totalVal * 100).toFixed(1) + '% of portfolio';
+  }
+}
+
+// ============================================================
+// RENDER: Holdings Table
+// ============================================================
+function renderHoldings() {
+  const tbody = document.getElementById('holdingsBody');
+
+  // Compute values
+  const withValues = HOLDINGS.map(h => {
+    const val = getHoldingValue(h);
+    return { ...h, value: val };
+  });
+
+  const totalVal = withValues.reduce((s, h) => s + (h.value || 0), 0);
+
+  // Sort by value desc
+  withValues.sort((a, b) => (b.value || 0) - (a.value || 0));
+
+  // Filter
+  let filtered = withValues;
+  if (currentFilter !== 'all') {
+    if (['TFSA','RRSP','Crypto'].includes(currentFilter)) {
+      filtered = withValues.filter(h => h.account === currentFilter);
+    } else if (currentFilter === 'Precious Metals') {
+      filtered = withValues.filter(h => ['Gold','Silver','Copper','Gold Miners'].includes(h.cat));
+    } else if (currentFilter === 'Tech') {
+      filtered = withValues.filter(h => h.catKey === 'tech');
+    }
+  }
+
+  const catColors = {
+    broad:'cat-broad', gold:'cat-gold', silver:'cat-silver',
+    energy:'cat-energy', tech:'cat-tech', canada:'cat-canada',
+    crypto:'cat-crypto', thematic:'cat-thematic', uranium:'cat-uranium',
+    individual:'cat-individual'
+  };
+
+  tbody.innerHTML = filtered.map(h => {
+    let priceStr = '—', dayChgStr = '—', dayChgPctStr = '—';
+    let dayClass = '';
+
+    if (h.cgId) {
+      const cp = cryptoPrices[h.cgId];
+      if (cp) {
+        priceStr = fmtCAD(cp.cad, 2);
+        if (cp.change_pct != null) {
+          const prevCad = cp.cad / (1 + cp.change_pct / 100);
+          const dayChg = h.qty * (cp.cad - prevCad);
+          dayChgStr = fmtCAD(dayChg, 2);
+          dayChgPctStr = fmtPct(cp.change_pct);
+          dayClass = colorPct(cp.change_pct);
+        }
+      }
+    } else {
+      const price = getHoldingPrice(h);
+      const prev  = getHoldingPrevClose(h);
+      if (price != null) {
+        priceStr = fmtCAD(price, 2);
+        if (prev != null) {
+          const dayChgPct = (price - prev) / prev * 100;
+          const dayChg = h.qty * (price - prev);
+          dayChgStr = fmtCAD(dayChg, 2);
+          dayChgPctStr = fmtPct(dayChgPct);
+          dayClass = colorPct(dayChgPct);
+        }
+      }
+    }
+
+    const valStr = h.value ? fmtCAD(h.value) : '—';
+    const weight = totalVal > 0 && h.value ? (h.value / totalVal * 100) : 0;
+    const barWidth = Math.min(weight * 3, 60);
+
+    return `<tr data-account="${h.account}" data-cat="${h.catKey}">
+      <td>
+        <div class="symbol-cell">
+          <span class="symbol-badge">${h.symbol}</span>
+          <span class="cat-badge ${catColors[h.catKey] || 'cat-individual'}">${h.cat}</span>
+        </div>
+      </td>
+      <td><div class="name-cell" title="${h.name}">${h.name}</div></td>
+      <td><span class="account-tag">${h.account}</span></td>
+      <td>${h.qty.toLocaleString('en', {maximumFractionDigits:4})}</td>
+      <td>${priceStr}</td>
+      <td><strong>${valStr}</strong></td>
+      <td class="${dayClass}">${dayChgStr}</td>
+      <td class="${dayClass}">${dayChgPctStr}</td>
+      <td>
+        <div class="weight-bar">
+          <span style="font-size:11px;color:var(--text-secondary)">${weight > 0 ? weight.toFixed(1)+'%' : '—'}</span>
+          <div class="weight-fill" style="width:${barWidth}px;opacity:0.7"></div>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+// ============================================================
+// RENDER: Allocation Chart
+// ============================================================
+function renderChart() {
+  const categories = {};
+  HOLDINGS.forEach(h => {
+    const val = getHoldingValue(h);
+    if (!val) return;
+    const key = getCatGroup(h.catKey);
+    categories[key] = (categories[key] || 0) + val;
+  });
+
+  const sorted = Object.entries(categories).sort((a,b) => b[1]-a[1]);
+  const labels = sorted.map(e => e[0]);
+  const values = sorted.map(e => e[1]);
+  const total  = values.reduce((s,v) => s+v, 0);
+
+  const palette = ['#c9a84c','#4a9eff','#e74c3c','#2ecc71','#9b59b6','#e67e22','#1abc9c','#e91e63','#3498db'];
+
+  if (allocationChart) allocationChart.destroy();
+  const ctx = document.getElementById('allocationChart').getContext('2d');
+  allocationChart = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels,
+      datasets: [{
+        data: values,
+        backgroundColor: palette,
+        borderColor: '#0a0c10',
+        borderWidth: 2,
+        hoverBorderWidth: 3,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: '65%',
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => {
+              const v = ctx.raw;
+              const pct = (v / total * 100).toFixed(1);
+              return ` ${fmtCAD(v)} (${pct}%)`;
+            }
+          }
+        }
+      }
+    }
+  });
+
+  // Legend
+  const legend = document.getElementById('chartLegend');
+  legend.innerHTML = sorted.map((e, i) => `
+    <div class="legend-item">
+      <div class="legend-dot" style="background:${palette[i % palette.length]}"></div>
+      <span style="color:var(--text-secondary)">${e[0]}</span>
+      <span style="margin-left:auto;color:var(--text-primary);font-weight:600">${(e[1]/total*100).toFixed(1)}%</span>
+    </div>`).join('');
+}
+
+function getCatGroup(catKey) {
+  const map = {
+    broad:'Broad Market', gold:'Precious Metals', silver:'Precious Metals',
+    energy:'Energy Transition', tech:'Technology', canada:'Canada',
+    crypto:'Crypto', thematic:'Thematic', uranium:'Uranium/Nuclear',
+    individual:'Individual Stocks'
+  };
+  return map[catKey] || catKey;
+}
+
+// ============================================================
+// RENDER: Macro Indicators
+// ============================================================
+function renderMacro() {
+  const indicators = [
+    { id:'gold',   sym:'GC=F',     prefix:'$',  dec:0 },
+    { id:'silver', sym:'SI=F',     prefix:'$',  dec:2 },
+    { id:'btc',    sym:'BTC-CAD',  prefix:'$',  dec:0 },
+    { id:'sp500',  sym:'^GSPC',    prefix:'',   dec:0 },
+    { id:'usdcad', sym:'USDCAD=X', prefix:'',   dec:4 },
+    { id:'tsx',    sym:'^OSPTX',   prefix:'',   dec:0 },
+    { id:'oil',    sym:'CL=F',     prefix:'$',  dec:2 },
+    { id:'copper', sym:'HG=F',     prefix:'$',  dec:3 },
+  ];
+  indicators.forEach(ind => {
+    const p = priceMap[ind.sym];
+    if (!p || !p.price) return;
+    const pEl = document.getElementById(ind.id + 'Price');
+    const cEl = document.getElementById(ind.id + 'Change');
+    if (!pEl) return;
+    pEl.textContent = ind.prefix + p.price.toLocaleString('en', {minimumFractionDigits:ind.dec, maximumFractionDigits:ind.dec});
+    if (p.prevClose) {
+      const chg = p.price - p.prevClose;
+      const chgPct = chg / p.prevClose * 100;
+      cEl.textContent = (chg >= 0 ? '+' : '') + ind.prefix + chg.toLocaleString('en',{minimumFractionDigits:ind.dec,maximumFractionDigits:ind.dec})
+        + ' (' + fmtPct(chgPct) + ')';
+      cEl.className = 'macro-change ' + (chg >= 0 ? 'positive' : 'negative');
+    }
+  });
+}
+
+// ============================================================
+// GOLDMAN SACHS ANALYSIS
+// ============================================================
+function renderGSAnalysis() {
+  const withValues = HOLDINGS.map(h => ({ ...h, value: getHoldingValue(h) || 0 }));
+  const totalVal = withValues.reduce((s,h) => s + h.value, 0);
+
+  // Category weights
+  const catWeights = {};
+  withValues.forEach(h => {
+    const g = getCatGroup(h.catKey);
+    catWeights[g] = (catWeights[g] || 0) + h.value;
+  });
+
+  const pct = (key) => totalVal > 0 ? (catWeights[key] || 0) / totalVal * 100 : 0;
+  const broadPct   = pct('Broad Market');
+  const metalsPct  = pct('Precious Metals');
+  const techPct    = pct('Technology');
+  const cryptoPct  = pct('Crypto');
+  const energyPct  = pct('Energy Transition');
+  const uraniumPct = pct('Uranium/Nuclear');
+
+  // Top holdings
+  const top5 = withValues.sort((a,b)=>b.value-a.value).slice(0,5);
+
+  const thesis = `Portfolio exhibits a <strong style="color:var(--gold-light)">dual-mandate structure</strong>: systematic long-term accumulation via broad index exposure (VFV/XUU, ~${(broadPct).toFixed(0)}% combined) overlaid with high-conviction macro thematic bets.
+  <br><br>The <strong style="color:var(--gold-light)">${metalsPct.toFixed(0)}% precious metals allocation</strong> (OUNZ, SLV, XGD, COPX, ICOP) reflects a coherent thesis: monetaary debasement, central bank gold accumulation, and USD reserve erosion. This is structural, not tactical.
+  <br><br>The energy transition cluster (HCLN, BATT, ION, HLIT) and uranium exposure (NLR, SASK) position the portfolio for the multi-decade energy infrastructure build-out — a GS-rated <span class="rating-badge rating-ob">OVERWEIGHT</span> theme.
+  <br><br>Crypto (~${cryptoPct.toFixed(0)}%) via ETH, SOL, AAVE signals DeFi/Web3 conviction beyond simple BTC exposure.`;
+
+  document.getElementById('gsThesis').innerHTML = thesis;
+
+  const today = new Date().toLocaleDateString('en-CA', { year:'numeric', month:'long', day:'numeric' });
+  document.getElementById('gsDate').textContent = `GS Investment Intelligence · ${today}`;
+
+  // Recommendations
+  const goldPrice = priceMap['GC=F']?.price;
+  const silverPrice = priceMap['SI=F']?.price;
+  const btcPrice = priceMap['BTC-CAD']?.price || (cryptoPrices['bitcoin']?.cad);
+  const nvdaPrice = priceMap['NVDA']?.price;
+
+  const recs = [];
+
+  if (metalsPct > 0) {
+    const goldSilverRatio = (goldPrice && silverPrice) ? (goldPrice / silverPrice) : null;
+    const ratioNote = goldSilverRatio ? `Current Gold/Silver ratio: <strong>${goldSilverRatio.toFixed(0)}:1</strong>. ` : '';
+    recs.push({ type:'rec', title:'OVERWEIGHT — Precious Metals Thesis Intact',
+      body: `${ratioNote}With central banks net buyers of gold at 40-year highs and real rates potentially peaking, OUNZ and XGD remain core holds. ${goldSilverRatio && goldSilverRatio > 80 ? 'Elevated Gold/Silver ratio suggests SLV may outperform on a relative basis — consider adding SLV.' : 'Consider trimming SLV if ratio compresses below 80.'}` });
+  }
+
+  recs.push({ type:'rec', title:'ADD — Copper Exposure (COPX/ICOP)',
+    body:'Copper demand from EV infrastructure, grid upgrades, and data center buildout is structurally underpinned. AI-driven power consumption surge is a new demand vector not priced in 12 months ago. Current 2-share positions are small — consider building to 5–8 shares each on dips.' });
+
+  if (uraniumPct < 5) {
+    recs.push({ type:'warning', title:'INCREASE — Uranium (NLR / SASK)',
+      body:'Nuclear energy is experiencing a policy renaissance (SMR approvals, US energy security mandates, European nuclear re-ratings). NLR + SASK combined weight is below 5% — meaningful underweight relative to the conviction level. SASK (Atha Energy) is a high-beta uranium explorer; consider adding NLR for quality balance.' });
+  }
+
+  recs.push({ type:'rec', title:'HOLD — NVDA with Tight Stop',
+    body:`NVIDIA remains the dominant AI infrastructure play. At current AI capex levels, NVDA has near-monopoly pricing power on H100/B200 GPU. ${nvdaPrice ? 'Monitor for earnings guidance disappointments' : 'Consider averaging into weakness'} as the primary risk catalyst. Hold position with review at each quarterly earnings.` });
+
+  recs.push({ type:'warning', title:'REVIEW — Underperforming Thematic ETFs',
+    body:'HCLN, BATT, ION, HLIT have underperformed on higher-for-longer rates compressing clean energy multiples. Thesis is intact long-term but may face 12–18 months of further headwinds. Review position sizes — no new buying until rate cut cycle is confirmed, but hold existing positions given long-dated thesis.' });
+
+  document.getElementById('gsRecs').innerHTML = recs.map(r => `
+    <div class="gs-rec ${r.type === 'warning' ? 'warning' : r.type === 'risk' ? 'risk' : ''}">
+      <div class="gs-rec-title">${r.title}</div>
+      <div class="gs-rec-body">${r.body}</div>
+    </div>`).join('');
+
+  const risks = [];
+  if (cryptoPct > 8) risks.push({ type:'risk', title:'Crypto Concentration Risk', body:`${cryptoPct.toFixed(1)}% in crypto assets. Volatile, unregulated asset class. While SOL and AAVE reflect DeFi conviction, ensure this is sized to a position you can hold through 60–80% drawdowns.` });
+  risks.push({ type:'warning', title:'USD Exposure', body:`Significant USD-denominated positions (QQQ, NVDA, AMZN, OUNZ, SLV, CIBR) create implicit long-USD risk. Current CAD/USD weakness benefits these holdings but reversal could compress CAD-denominated portfolio value materially.` });
+  risks.push({ type:'risk', title:'BYND / PSYK — Speculative Tail Risk', body:'Beyond Meat and the Horizons Psychedelic ETF carry near-zero fundamental support in the near term. Consider exiting or writing off these positions — they add noise to portfolio analysis without meaningful return potential.' });
+
+  document.getElementById('gsRisks').innerHTML = risks.map(r => `
+    <div class="gs-rec ${r.type}">
+      <div class="gs-rec-title">${r.title}</div>
+      <div class="gs-rec-body">${r.body}</div>
+    </div>`).join('');
+}
+
+// ============================================================
+// FETCH: News via RSS feeds through CORS proxy
+// ============================================================
+async function fetchNewsSection(query, containerId, limit=6) {
+  const rssUrl = `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=en&gl=US&ceid=US:en`;
+  const el = document.getElementById(containerId);
+  try {
+    const res = await fetchWithFallback(rssUrl);
+    const text = await res.text();
+    const parser = new DOMParser();
+    const xml = parser.parseFromString(text, 'text/xml');
+    const items = xml.querySelectorAll('item');
+    if (!items.length) throw new Error('No items');
+
+    let html = '';
+    Array.from(items).slice(0, limit).forEach(item => {
+      const title = item.querySelector('title')?.textContent || '';
+      const link  = item.querySelector('link')?.textContent || '#';
+      const pubDate = item.querySelector('pubDate')?.textContent || '';
+      const source = item.querySelector('source')?.textContent || 'News';
+      const timeAgo = pubDate ? getTimeAgo(new Date(pubDate)) : '';
+      const cleanTitle = title.replace(/ - [^-]+$/, ''); // strip source suffix
+      html += `<div class="news-item" onclick="window.open('${link}','_blank')">
+        <div class="news-headline">${cleanTitle}</div>
+        <div class="news-meta"><span class="news-source">${source}</span> · ${timeAgo}</div>
+      </div>`;
+    });
+    el.innerHTML = html || '<div class="news-placeholder">No news found.</div>';
+  } catch(e) {
+    el.innerHTML = `<div class="news-placeholder">News temporarily unavailable. <a href="https://news.google.com/search?q=${encodeURIComponent(query)}" target="_blank" style="color:var(--gold)">Search Google News →</a></div>`;
+  }
+}
+
+function getTimeAgo(date) {
+  const secs = Math.floor((new Date() - date) / 1000);
+  if (secs < 60) return 'Just now';
+  if (secs < 3600) return Math.floor(secs/60) + 'm ago';
+  if (secs < 86400) return Math.floor(secs/3600) + 'h ago';
+  return Math.floor(secs/86400) + 'd ago';
+}
+
+// ============================================================
+// FILTER
+// ============================================================
+function filterHoldings(filter, btn) {
+  currentFilter = filter;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderHoldings();
+}
+
+// ============================================================
+// MAIN REFRESH
+// ============================================================
+async function refreshAll() {
+  const loading = document.getElementById('loadingIndicator');
+  loading.style.display = 'flex';
+
+  try {
+    await Promise.allSettled([
+      fetchAllPrices(),
+      fetchCryptoPrices(),
+    ]);
+
+    renderSummary();
+    renderHoldings();
+    renderChart();
+    renderMacro();
+    renderGSAnalysis();
+
+    // News (async, non-blocking)
+    fetchNewsSection('gold silver precious metals central bank', 'newsMetals');
+    fetchNewsSection('bitcoin ethereum crypto DeFi Solana', 'newsCrypto');
+    fetchNewsSection('uranium nuclear energy copper lithium battery', 'newsEnergy');
+
+    const now = new Date().toLocaleString('en-CA', { timeStyle:'short', dateStyle:'medium' });
+    document.getElementById('lastUpdated').textContent = 'Updated: ' + now;
+    document.getElementById('footerTime').textContent = now;
+
+  } finally {
+    loading.style.display = 'none';
+  }
+}
+
+// ============================================================
+// INIT
+// ============================================================
+document.addEventListener('DOMContentLoaded', () => {
+  // Show warning if opened as a local file
+  if (window.location.protocol === 'file:') {
+    document.getElementById('localFileBanner').style.display = 'block';
+  }
+  // Render GS analysis immediately (static), then fetch live data
+  renderGSAnalysis();
+  refreshAll();
+});
+</script>
+</body>
+</html>
