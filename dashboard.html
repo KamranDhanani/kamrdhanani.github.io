@@ -659,39 +659,133 @@ async function fetchWithFallback(targetUrl) {
   throw new Error('All proxies failed for: ' + targetUrl);
 }
 
-async function fetchYahooBatch(symbols) {
-  const joined = symbols.join(',');
-  const yahooUrl = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(joined)}&lang=en&region=CA&fields=regularMarketPrice,regularMarketPreviousClose,currency`;
-  try {
-    const res = await fetchWithFallback(yahooUrl);
-    const data = await res.json();
-    const quotes = data?.quoteResponse?.result || [];
-    quotes.forEach(q => {
-      priceMap[q.symbol] = {
-        price:     q.regularMarketPrice ?? null,
-        prevClose: q.regularMarketPreviousClose ?? null,
-        currency:  q.currency ?? 'USD',
-      };
-    });
-    return quotes.length;
-  } catch(e) {
-    console.warn('Yahoo batch failed for', symbols.join(','), '—', e.message);
-    return 0;
+// ============================================================
+// STOOQ SYMBOL MAP  (Yahoo Finance ticker → Stooq ticker)
+// Stooq is proxy-friendly and doesn't require API keys
+// ============================================================
+const STOOQ = {
+  // TFSA / RRSP holdings — TSX (.ca)
+  'VFV.TO':'vfv.ca',   'XUU.TO':'xuu.ca',   'XIC.TO':'xic.ca',   'XGD.TO':'xgd.ca',
+  'HCLN.TO':'hcln.ca', 'HLIT.TO':'hlit.ca', 'SHOP.TO':'shop.ca', 'ARKK.TO':'arkk.ca',
+  'BCE.TO':'bce.ca',   'CJT.TO':'cjt.ca',   'CASH.TO':'cash.ca', 'PSYK.TO':'psyk.ca',
+  'SASK.V':'sask.ca',
+  // US-listed holdings (.us)
+  'QQQ':'qqq.us',   'OUNZ':'ounz.us',  'SLV':'slv.us',   'COPX':'copx.us',
+  'ICOP':'icop.us', 'BATT':'batt.us',  'ION':'ion.us',   'NLR':'nlr.us',
+  'NVDA':'nvda.us', 'AMZN':'amzn.us',  'GOOG':'goog.us', 'MSFT':'msft.us',
+  'CIBR':'cibr.us', 'COST':'cost.us',  'BA':'ba.us',     'BYND':'bynd.us',
+  'KVUE':'kvue.us',
+  // Macro — commodities & FX
+  'GC=F':'gc.f',       'SI=F':'si.f',     'CL=F':'cl.f',     'HG=F':'hg.f',
+  '^GSPC':'^spx',      '^OSPTX':'^tsx',   'USDCAD=X':'usdcad',
+};
+// Reverse map: stooq symbol → yahoo symbol
+const STOOQ_REV = {};
+Object.entries(STOOQ).forEach(([y,s]) => { STOOQ_REV[s.toLowerCase()] = y; });
+
+// ============================================================
+// FETCH: Stooq current prices  (replaces Yahoo Finance)
+// ============================================================
+async function fetchStooqPrices(yahooSymbols) {
+  const pairs = yahooSymbols.map(s => ({ yahoo:s, stooq:STOOQ[s] })).filter(p => p.stooq);
+  if (!pairs.length) return;
+
+  // Batch into groups of 15
+  for (let i = 0; i < pairs.length; i += 15) {
+    const batch = pairs.slice(i, i + 15);
+    const stooqStr = batch.map(p => p.stooq).join(',');
+    const url = `https://stooq.com/q/l/?s=${stooqStr}&f=sd2c&h&e=csv`;
+    try {
+      const res = await fetchWithFallback(url);
+      const text = await res.text();
+      if (!text.includes(',')) throw new Error('Bad CSV');
+      text.trim().split('\n').slice(1).forEach(line => {
+        const parts = line.split(',');
+        if (parts.length < 3) return;
+        const stooqSym = parts[0].trim().toLowerCase();
+        const close    = parseFloat(parts[2]);
+        if (isNaN(close) || close <= 0) return;
+        const yahooSym = STOOQ_REV[stooqSym]
+          || batch.find(p => p.stooq.toLowerCase() === stooqSym)?.yahoo;
+        if (!yahooSym) return;
+        const isCad = yahooSym.endsWith('.TO') || yahooSym.endsWith('.V');
+        priceMap[yahooSym] = { price: close, prevClose: null, currency: isCad ? 'CAD' : 'USD' };
+      });
+    } catch(e) {
+      console.warn('Stooq prices failed:', stooqStr, '—', e.message);
+    }
+  }
+}
+
+// Fetch 5-day daily history to extract previous close (for day-change %)
+async function fetchStooqPrevClose(yahooSymbols) {
+  const pairs = yahooSymbols.map(s => ({ yahoo:s, stooq:STOOQ[s] })).filter(p => p.stooq);
+  if (!pairs.length) return;
+
+  const fmt = d => d.toISOString().slice(0,10).replace(/-/g,'');
+  const d2 = fmt(new Date());
+  const past = new Date(); past.setDate(past.getDate() - 6);
+  const d1 = fmt(past);
+
+  // Batch into groups of 10 for history endpoint
+  for (let i = 0; i < pairs.length; i += 10) {
+    const batch = pairs.slice(i, i + 10);
+    const stooqStr = batch.map(p => p.stooq).join(',');
+    const url = `https://stooq.com/q/d/l/?s=${stooqStr}&d1=${d1}&d2=${d2}&i=d`;
+    try {
+      const res = await fetchWithFallback(url);
+      const text = await res.text();
+      if (!text.includes(',')) continue;
+      // Group rows by symbol → [close1, close2, ...]
+      const bySymbol = {};
+      text.trim().split('\n').slice(1).forEach(line => {
+        const p = line.split(',');
+        if (p.length < 6) return;
+        const sym = p[0].trim().toLowerCase();
+        const c   = parseFloat(p[5]); // Symbol,Date,Open,High,Low,Close,Volume
+        if (!isNaN(c) && c > 0) {
+          if (!bySymbol[sym]) bySymbol[sym] = [];
+          bySymbol[sym].push(c);
+        }
+      });
+      Object.entries(bySymbol).forEach(([stooqSym, closes]) => {
+        if (closes.length < 2) return;
+        const yahooSym = STOOQ_REV[stooqSym]
+          || batch.find(p => p.stooq.toLowerCase() === stooqSym)?.yahoo;
+        if (yahooSym && priceMap[yahooSym]) {
+          priceMap[yahooSym].prevClose = closes[closes.length - 2];
+        }
+      });
+    } catch(e) {
+      console.warn('Stooq prevClose failed:', stooqStr, '—', e.message);
+    }
   }
 }
 
 async function fetchAllPrices() {
-  const yahooSymbols = [...new Set(HOLDINGS.filter(h => h.yahoo).map(h => h.yahoo))];
-  const macroSymbols = ['GC=F','SI=F','^GSPC','USDCAD=X','^OSPTX','CL=F','HG=F','BTC-CAD'];
-  const allSymbols   = [...new Set([...yahooSymbols, ...macroSymbols])];
+  const holdingSymbols = [...new Set(HOLDINGS.filter(h => h.yahoo).map(h => h.yahoo))];
+  const macroSymbols   = ['GC=F','SI=F','^GSPC','USDCAD=X','^OSPTX','CL=F','HG=F'];
+  const allSymbols     = [...new Set([...holdingSymbols, ...macroSymbols])];
 
-  // Smaller batches of 8 to stay within proxy URL limits
-  const batches = [];
-  for (let i = 0; i < allSymbols.length; i += 8) batches.push(allSymbols.slice(i, i + 8));
-  await Promise.allSettled(batches.map(b => fetchYahooBatch(b)));
+  // Fetch current prices + previous close in parallel
+  await Promise.allSettled([
+    fetchStooqPrices(allSymbols),
+    fetchStooqPrevClose(allSymbols),
+  ]);
 
+  // USD/CAD rate
   const usdcad = priceMap['USDCAD=X'];
   if (usdcad?.price) usdcadRate = usdcad.price;
+
+  // BTC/CAD: pull from CoinGecko results (already fetched)
+  const btc = cryptoPrices['bitcoin'];
+  if (btc?.cad) {
+    priceMap['BTC-CAD'] = {
+      price:     btc.cad,
+      prevClose: btc.change_pct != null ? btc.cad / (1 + btc.change_pct / 100) : null,
+      currency:  'CAD',
+    };
+  }
 }
 
 // ============================================================
