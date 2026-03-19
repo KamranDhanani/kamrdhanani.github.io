@@ -1,0 +1,2132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kam's Portfolio — GS Analysis Dashboard v1.5</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg-primary: #0a0c10;
+      --bg-secondary: #111520;
+      --bg-card: #161b2e;
+      --bg-card-hover: #1c2340;
+      --gold: #c9a84c;
+      --gold-light: #e8c97a;
+      --gold-dim: #7a6130;
+      --green: #2ecc71;
+      --red: #e74c3c;
+      --text-primary: #eaf0ff;
+      --text-secondary: #8898aa;
+      --text-muted: #4a5568;
+      --border: #1e2a45;
+      --border-gold: #3a3020;
+      --accent-blue: #3b82f6;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    /* HEADER */
+    .header {
+      background: linear-gradient(135deg, #0d1117 0%, #161b2e 100%);
+      border-bottom: 1px solid var(--border-gold);
+      padding: 16px 32px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .header-left { display: flex; align-items: center; gap: 16px; }
+    .gs-badge {
+      background: var(--gold);
+      color: #000;
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 1.5px;
+      padding: 3px 8px;
+      border-radius: 2px;
+      text-transform: uppercase;
+    }
+    .header-title { font-size: 20px; font-weight: 700; color: var(--text-primary); }
+    .header-subtitle { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+    .header-right { display: flex; align-items: center; gap: 16px; }
+    .refresh-btn {
+      background: transparent;
+      border: 1px solid var(--gold-dim);
+      color: var(--gold);
+      padding: 6px 14px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+      transition: all 0.2s;
+    }
+    .refresh-btn:hover { background: var(--gold-dim); }
+    .last-updated { font-size: 11px; color: var(--text-secondary); }
+    .loading-indicator {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--gold);
+    }
+    .spinner {
+      width: 14px; height: 14px;
+      border: 2px solid var(--gold-dim);
+      border-top-color: var(--gold);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    /* MAIN LAYOUT */
+    .main { padding: 24px 32px; max-width: 1600px; margin: 0 auto; }
+    .section-title {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--gold);
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .section-title::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+    /* SUMMARY TITLE ROW — toggle button sits outside section-title so ::after line works correctly */
+    .summary-title-row {
+      display: flex;
+      align-items: center;
+      margin-bottom: 12px;
+      gap: 12px;
+    }
+    .summary-title-row .section-title {
+      margin-bottom: 0;
+      flex: 1;
+    }
+    .currency-toggle-btn {
+      background: var(--bg-card);
+      border: 1px solid var(--gold-dim);
+      color: var(--gold);
+      padding: 5px 14px;
+      border-radius: 20px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      transition: all 0.2s;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .currency-toggle-btn:hover { background: var(--gold-dim); }
+    /* SUMMARY CARDS */
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    .summary-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      transition: border-color 0.2s;
+    }
+    .summary-card:hover { border-color: var(--gold-dim); }
+    .summary-card.primary { border-color: var(--gold-dim); }
+    .card-label { font-size: 10px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+    .card-value { font-size: 22px; font-weight: 700; color: var(--text-primary); }
+    .card-sub { font-size: 11px; margin-top: 4px; }
+    .positive { color: var(--green); }
+    .negative { color: var(--red); }
+    .neutral { color: var(--text-secondary); }
+    /* TWO COLUMN LAYOUT */
+    .two-col { display: grid; grid-template-columns: 380px 1fr; gap: 20px; margin-bottom: 24px; }
+    .three-col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; margin-bottom: 24px; }
+    /* CARDS */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
+    }
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+    /* CHART */
+    .chart-wrapper { position: relative; height: 280px; display: flex; align-items: center; justify-content: center; }
+    .chart-legend {
+      margin-top: 12px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+    .legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; }
+    .legend-dot { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+    /* GS ANALYSIS */
+    .gs-analysis-card { background: var(--bg-card); border: 1px solid var(--border-gold); border-radius: 8px; padding: 20px; }
+    .gs-header { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+    .gs-label { font-size: 10px; font-weight: 800; letter-spacing: 2px; color: var(--gold); text-transform: uppercase; }
+    .gs-analyst { font-size: 12px; color: var(--text-secondary); }
+    .gs-section { margin-bottom: 16px; }
+    .gs-section-title { font-size: 11px; font-weight: 700; color: var(--gold-light); margin-bottom: 8px; }
+    .gs-text { font-size: 12px; color: var(--text-secondary); line-height: 1.7; }
+    .gs-rec {
+      background: #0d1a10;
+      border-left: 3px solid var(--green);
+      padding: 10px 12px;
+      border-radius: 0 4px 4px 0;
+      margin-bottom: 8px;
+      font-size: 12px;
+      color: var(--text-primary);
+    }
+    .gs-rec.warning { background: #1a1200; border-left-color: var(--gold); }
+    .gs-rec.risk { background: #1a0800; border-left-color: var(--red); }
+    .gs-rec-title { font-weight: 700; font-size: 11px; margin-bottom: 3px; }
+    .gs-rec-body { color: var(--text-secondary); line-height: 1.5; }
+    .rating-badge {
+      display: inline-block;
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: 1px;
+      padding: 2px 6px;
+      border-radius: 2px;
+      margin-left: 6px;
+    }
+    .rating-ob { background: #0d3321; color: var(--green); }
+    .rating-n { background: #1a1a0a; color: var(--gold); }
+    .rating-uw { background: #2a0a0a; color: var(--red); }
+    /* HOLDINGS TABLE */
+    .holdings-filter {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+    .filter-btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      padding: 4px 12px;
+      border-radius: 20px;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 600;
+      transition: all 0.2s;
+    }
+    .filter-btn.active, .filter-btn:hover {
+      background: var(--gold-dim);
+      border-color: var(--gold);
+      color: var(--gold-light);
+    }
+    .table-wrapper { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; }
+    thead th {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+      padding: 8px 12px;
+      text-align: right;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    thead th:first-child, thead th:nth-child(2) { text-align: left; }
+    tbody tr {
+      border-bottom: 1px solid rgba(30, 42, 69, 0.5);
+      transition: background 0.15s;
+    }
+    tbody tr:hover { background: var(--bg-card-hover); }
+    tbody td {
+      padding: 10px 12px;
+      font-size: 12px;
+      text-align: right;
+      white-space: nowrap;
+    }
+    tbody td:first-child, tbody td:nth-child(2) { text-align: left; }
+    .symbol-cell { display: flex; align-items: center; gap: 8px; }
+    .symbol-badge {
+      font-weight: 800;
+      font-size: 12px;
+      color: var(--text-primary);
+      min-width: 50px;
+    }
+    .cat-badge {
+      font-size: 9px;
+      font-weight: 600;
+      padding: 2px 6px;
+      border-radius: 3px;
+      letter-spacing: 0.5px;
+    }
+    .cat-broad { background: #0d2040; color: #5b9bd5; }
+    .cat-gold { background: #2a1a00; color: var(--gold); }
+    .cat-silver { background: #1a1a2a; color: #a0a0cc; }
+    .cat-energy { background: #002a1a; color: #40cc80; }
+    .cat-tech { background: #0d0030; color: #8060cc; }
+    .cat-canada { background: #200010; color: #cc4060; }
+    .cat-crypto { background: #200020; color: #cc60cc; }
+    .cat-thematic { background: #001a2a; color: #40aabb; }
+    .cat-uranium { background: #1a2000; color: #a0cc40; }
+    .cat-individual { background: #1a1a1a; color: #888; }
+    .name-cell { font-size: 11px; color: var(--text-secondary); max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
+    .loading-cell { color: var(--text-muted); font-style: italic; }
+    .weight-bar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      justify-content: flex-end;
+    }
+    .weight-fill {
+      height: 4px;
+      border-radius: 2px;
+      background: var(--gold-dim);
+    }
+    .account-tag { font-size: 9px; color: var(--text-muted); font-weight: 600; letter-spacing: 0.5px; }
+    /* CURRENCY SPLIT */
+    .currency-split-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1.2fr;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    .fx-table-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+    .fx-table-card table { width: 100%; border-collapse: collapse; }
+    .fx-table-card td { padding: 7px 4px; font-size: 13px; border-bottom: 1px solid rgba(30,42,69,0.4); }
+    .fx-table-card tr:last-child td { border-bottom: none; }
+    /* PERIOD FILTER */
+    .period-filter {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 10px;
+      flex-wrap: wrap;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    .period-label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; align-self: center; margin-right: 4px; }
+    .period-btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      padding: 3px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      transition: all 0.2s;
+    }
+    .period-btn.active, .period-btn:hover {
+      background: #0d2040;
+      border-color: var(--accent-blue);
+      color: #6fb3ff;
+    }
+    .hist-loading { font-size: 10px; color: var(--text-muted); font-style: italic; align-self: center; margin-left: 8px; display: none; }
+    /* MACRO */
+    .macro-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px; }
+    .macro-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .macro-label { font-size: 10px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
+    .macro-value { font-size: 18px; font-weight: 700; }
+    .macro-change { font-size: 11px; margin-top: 2px; }
+    .macro-icon { font-size: 24px; opacity: 0.6; }
+    /* NEWS */
+    .news-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; margin-bottom: 24px; }
+    .news-feed { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+    .news-item {
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+    }
+    .news-item:last-child { border-bottom: none; }
+    .news-item:hover .news-headline { color: var(--gold-light); }
+    .news-headline { font-size: 12px; color: var(--text-primary); line-height: 1.5; margin-bottom: 4px; transition: color 0.2s; }
+    .news-meta { font-size: 10px; color: var(--text-muted); display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+    .news-source { color: var(--gold-dim); font-weight: 600; }
+    .news-age-badge {
+      font-size: 9px;
+      font-weight: 700;
+      padding: 1px 5px;
+      border-radius: 3px;
+      letter-spacing: 0.5px;
+    }
+    .news-age-fresh  { background: #0d3321; color: var(--green); }
+    .news-age-recent { background: #1a1200; color: var(--gold); }
+    .news-age-old    { background: #1a1a1a; color: var(--text-muted); }
+    .news-stale { opacity: 0.55; }
+    .news-placeholder { color: var(--text-muted); font-size: 12px; font-style: italic; padding: 12px 0; }
+    .news-feed-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
+    .news-refresh-time { font-size:9px; color:var(--text-muted); font-style:italic; }
+    /* FOOTER */
+    .footer {
+      text-align: center;
+      padding: 24px;
+      color: var(--text-muted);
+      font-size: 10px;
+      border-top: 1px solid var(--border);
+      margin-top: 8px;
+    }
+    /* TABS */
+    .tab-bar { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+    .tab {
+      padding: 8px 16px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: all 0.2s;
+    }
+    .tab.active { color: var(--gold); border-bottom-color: var(--gold); }
+    .tab:hover { color: var(--text-primary); }
+    [title] { cursor: help; }
+    /* Responsive */
+    @media (max-width: 1200px) {
+      .summary-grid { grid-template-columns: repeat(3, 1fr); }
+      .two-col { grid-template-columns: 1fr; }
+      .news-grid { grid-template-columns: 1fr 1fr; }
+      .macro-grid { grid-template-columns: repeat(2, 1fr); }
+      .currency-split-grid { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 768px) {
+      .currency-split-grid { grid-template-columns: 1fr; }
+      .summary-grid { grid-template-columns: 1fr 1fr; }
+    }
+    /* ── GS RESEARCH DESK ─────────────────────────────── */
+    .research-desk-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-gold);
+      border-radius: 8px;
+      padding: 24px;
+      margin-bottom: 24px;
+    }
+    .research-desk-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .research-mandate {
+      font-size: 12px;
+      color: var(--text-secondary);
+      line-height: 1.7;
+      margin-bottom: 20px;
+      padding: 14px 16px;
+      background: rgba(201,168,76,0.05);
+      border-left: 3px solid var(--gold-dim);
+      border-radius: 0 4px 4px 0;
+    }
+    .research-table-wrapper { overflow-x: auto; margin-bottom: 24px; }
+    .research-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .research-table thead th {
+      font-size: 10px; font-weight: 700; letter-spacing: 1px;
+      text-transform: uppercase; color: var(--text-secondary);
+      padding: 8px 10px; text-align: right;
+      border-bottom: 1px solid var(--border-gold);
+      white-space: nowrap; background: rgba(0,0,0,0.2);
+    }
+    .research-table thead th:first-child,
+    .research-table thead th:nth-child(2) { text-align: left; }
+    .research-table tbody tr { border-bottom: 1px solid rgba(30,42,69,0.4); transition: background 0.15s; }
+    .research-table tbody tr:hover { background: var(--bg-card-hover); }
+    .research-table tbody td { padding: 10px 10px; text-align: right; white-space: nowrap; vertical-align: middle; }
+    .research-table tbody td:first-child { text-align: left; }
+    .research-table tbody td:nth-child(2) { text-align: left; max-width: 160px; white-space: normal; min-width: 120px; }
+    .moat-badge { display: inline-block; font-size: 9px; font-weight: 700; letter-spacing: 0.5px; padding: 2px 7px; border-radius: 3px; }
+    .moat-strong   { background: #0d3321; color: var(--green); }
+    .moat-moderate { background: #1a1200; color: var(--gold); }
+    .moat-weak     { background: #2a0a0a; color: var(--red); }
+    .risk-score { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%; font-size: 11px; font-weight: 800; }
+    .risk-1to3  { background: #0d3321; color: var(--green); }
+    .risk-4to6  { background: #1a1200; color: var(--gold); }
+    .risk-7to10 { background: #2a0a0a; color: var(--red); }
+    .research-stock-details { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 4px; }
+    .research-stock-card { background: rgba(0,0,0,0.2); border: 1px solid var(--border); border-radius: 6px; padding: 14px 16px; }
+    .research-stock-ticker { font-size: 14px; font-weight: 800; color: var(--text-primary); margin-bottom: 2px; }
+    .research-stock-name { font-size: 11px; color: var(--text-secondary); margin-bottom: 10px; }
+    .research-detail-row { display: flex; justify-content: space-between; align-items: baseline; padding: 3px 0; font-size: 11px; border-bottom: 1px solid rgba(30,42,69,0.3); }
+    .research-detail-row:last-child { border-bottom: none; }
+    .research-detail-label { color: var(--text-muted); }
+    .research-detail-value { color: var(--text-primary); font-weight: 600; }
+    .bull-target { color: var(--green); }
+    .bear-target { color: var(--red); }
+    .research-disclaimer { font-size: 10px; color: var(--text-muted); margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border); line-height: 1.6; }
+    @media (max-width: 1200px) { .research-stock-details { grid-template-columns: 1fr; } }
+    /* ── UNDEPLOYED CAPITAL ─────────────────────────────── */
+    .undeploy-section {
+      margin-bottom: 24px;
+    }
+    .undeploy-title-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .undeploy-title-row .section-title { margin-bottom: 0; flex: 1; }
+    .undeploy-toggle {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .undeploy-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 12px;
+    }
+    .undeploy-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      transition: border-color 0.2s;
+      position: relative;
+      overflow: hidden;
+    }
+    .undeploy-card:hover { border-color: var(--gold-dim); }
+    .undeploy-card.primary { border-color: rgba(46,204,113,0.3); }
+    .undeploy-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, rgba(46,204,113,0.4), transparent);
+    }
+    .undeploy-card.primary::before {
+      background: linear-gradient(90deg, transparent, rgba(46,204,113,0.7), transparent);
+    }
+    .undeploy-acct-pill {
+      display: inline-block;
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      padding: 2px 7px;
+      border-radius: 10px;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+    }
+    .pill-all    { background: rgba(201,168,76,0.15);  color: var(--gold); }
+    .pill-tfsa   { background: rgba(59,130,246,0.15);  color: #6fb3ff; }
+    .pill-rrsp   { background: rgba(46,204,113,0.12);  color: var(--green); }
+    .pill-crypto { background: rgba(156,92,204,0.15);  color: #b87eec; }
+    .pill-usd    { background: rgba(255,165,0,0.12);   color: #ffb347; }
+    .undeploy-value { font-size: 22px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px; }
+    .undeploy-sub   { font-size: 11px; color: var(--text-secondary); line-height: 1.5; }
+    .undeploy-ready {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--green);
+      margin-top: 6px;
+    }
+    .ready-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--green);
+      animation: pulse-dot 2s ease-in-out infinite;
+    }
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50%       { opacity: 0.5; transform: scale(0.7); }
+    }
+    @media (max-width: 1200px) { .undeploy-grid { grid-template-columns: repeat(3, 1fr); } }
+    @media (max-width: 768px)  { .undeploy-grid { grid-template-columns: 1fr 1fr; } }
+    /* ── PRIVACY BLUR TOGGLE ─────────────────────────────── */
+    .balance-mask { transition: filter 0.25s ease; }
+    body.balances-hidden .balance-mask,
+    body.balances-hidden .undeploy-value,
+    body.balances-hidden .undeploy-sub,
+    body.balances-hidden .fx-rate-val { filter: blur(8px); user-select: none; pointer-events: none; }
+    .privacy-btn {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      padding: 5px 14px;
+      border-radius: 20px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      transition: all 0.2s;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .privacy-btn:hover { background: var(--bg-card-hover); border-color: var(--text-secondary); }
+    .privacy-btn.active { background: var(--bg-card); border-color: var(--gold-dim); color: var(--gold); }
+  </style>
+</head>
+<body>
+<div id="localFileBanner" style="display:none;background:#1a0e00;border-bottom:1px solid #7a6130;padding:10px 32px;font-size:12px;color:#c9a84c;text-align:center;">
+  ⚠️ <strong>Live prices require HTTPS.</strong> You're viewing this as a local file — prices won't load. Upload to GitHub Pages and open via <code>https://yourusername.github.io/dashboard.html</code> for full functionality.
+</div>
+<div class="header">
+  <div class="header-left">
+    <div>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span class="gs-badge">Goldman Sachs Desk</span>
+        <div class="header-title">Kam's Portfolio Intelligence</div>
+      </div>
+      <div class="header-subtitle">Consolidated view · TFSA · RRSP · Non-Reg · Crypto</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="loading-indicator" id="loadingIndicator">
+      <div class="spinner"></div>
+      <span>Fetching live data...</span>
+    </div>
+    <div class="last-updated" id="lastUpdated">Loading...</div>
+    <button class="refresh-btn" onclick="refreshAll()">↻ Refresh</button>
+  </div>
+</div>
+<div class="main">
+
+  <!-- SUMMARY CARDS -->
+  <!-- FIX: toggle button is OUTSIDE section-title so ::after line renders correctly between title text and button -->
+  <div class="summary-title-row">
+    <div class="section-title">Portfolio Summary</div>
+    <button id="currencyToggleBtn" class="currency-toggle-btn" onclick="toggleDisplayCurrency()">🇨🇦 CAD</button>
+    <button id="privacyToggleBtn" class="privacy-btn" onclick="togglePrivacyMode()" title="Hide balances for screen sharing">👁 Hide Balances</button>
+  </div>
+  <div class="summary-grid">
+    <div class="summary-card primary">
+      <div class="card-label" id="totalValueLabel">Total Portfolio incl. Cash (CAD est.)</div>
+      <div class="card-value balance-mask" id="totalValue">—</div>
+      <div class="card-sub balance-mask" id="totalDayChange">Loading prices...</div>
+      <div class="card-sub neutral balance-mask" id="totalInvestedSub" style="margin-top:4px;font-size:10px;"></div>
+    </div>
+    <div class="summary-card">
+      <div class="card-label" id="tfsaValueLabel">TFSA (CAD)</div>
+      <div class="card-value balance-mask" id="tfsaValue">—</div>
+      <div class="card-sub neutral" id="tfsaCount">— positions</div>
+    </div>
+    <div class="summary-card">
+      <div class="card-label" id="rrspValueLabel">RRSP (CAD)</div>
+      <div class="card-value balance-mask" id="rrspValue">—</div>
+      <div class="card-sub neutral" id="rrspCount">— positions</div>
+    </div>
+    <div class="summary-card">
+      <div class="card-label" id="cryptoValueLabel">Crypto (CAD est.)</div>
+      <div class="card-value balance-mask" id="cryptoValue">—</div>
+      <div class="card-sub neutral">ETH · SOL · AAVE</div>
+    </div>
+    <div class="summary-card">
+      <div class="card-label">Precious Metals Exposure</div>
+      <div class="card-value balance-mask" id="metalsValue">—</div>
+      <div class="card-sub neutral balance-mask" id="metalsPct">Gold · Silver · Miners</div>
+    </div>
+  </div>
+
+  <!-- UNDEPLOYED CAPITAL -->
+  <div class="undeploy-section">
+    <div class="undeploy-title-row">
+      <div class="section-title">Available Cash — Undeployed Capital</div>
+      <div class="undeploy-toggle">
+        <button class="filter-btn active" onclick="setUndeployedFilter('all', this)">All Accounts</button>
+        <button class="filter-btn" onclick="setUndeployedFilter('TFSA', this)">TFSA</button>
+        <button class="filter-btn" onclick="setUndeployedFilter('RRSP', this)">RRSP</button>
+        <button class="filter-btn" onclick="setUndeployedFilter('Crypto', this)">Crypto</button>
+      </div>
+    </div>
+    <div class="undeploy-grid" id="undeployedGrid">
+      <div class="undeploy-card"><div class="undeploy-value">—</div><div class="undeploy-sub">Loading...</div></div>
+    </div>
+  </div>
+
+  <!-- CURRENCY SPLIT + FX TABLE -->
+  <div class="section-title">Portfolio by Currency</div>
+  <div class="currency-split-grid">
+    <div class="summary-card">
+      <div class="card-label">🇺🇸 USD Holdings (CAD est.)</div>
+      <div class="card-value balance-mask" id="usdHoldingsCAD">—</div>
+      <div class="card-sub neutral" id="usdHoldingsCount">— positions</div>
+    </div>
+    <div class="summary-card">
+      <div class="card-label">🇨🇦 CAD Holdings</div>
+      <div class="card-value balance-mask" id="cadHoldingsCAD">—</div>
+      <div class="card-sub neutral" id="cadHoldingsCount">— positions</div>
+    </div>
+    <div class="fx-table-card">
+      <div class="card-label" style="margin-bottom:10px;">💱 Exchange Rates</div>
+      <table>
+        <thead>
+          <tr>
+            <th style="text-align:left;color:var(--text-secondary);font-size:10px;padding:4px 4px 8px;font-weight:700;letter-spacing:1px;text-transform:uppercase;">Pair</th>
+            <th style="text-align:right;color:var(--text-secondary);font-size:10px;padding:4px 4px 8px;font-weight:700;letter-spacing:1px;text-transform:uppercase;">Rate</th>
+            <th style="text-align:right;color:var(--text-secondary);font-size:10px;padding:4px 4px 8px;font-weight:700;letter-spacing:1px;text-transform:uppercase;">Day Chg</th>
+            <th style="text-align:right;color:var(--text-secondary);font-size:10px;padding:4px 4px 8px;font-weight:700;letter-spacing:1px;text-transform:uppercase;">Day %</th>
+          </tr>
+        </thead>
+        <tbody id="fxTableBody">
+          <tr><td colspan="4" style="color:var(--text-muted);font-style:italic;padding:10px 0;text-align:center;font-size:12px;">Loading rates...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ALLOCATION CHART + GS ANALYSIS -->
+  <div class="two-col" style="margin-bottom:24px;">
+    <div class="card">
+      <div class="section-title" style="margin-bottom:12px;">Asset Allocation</div>
+      <div class="chart-wrapper">
+        <canvas id="allocationChart"></canvas>
+      </div>
+      <div class="chart-legend" id="chartLegend"></div>
+    </div>
+    <div class="gs-analysis-card">
+      <div class="gs-header">
+        <span class="gs-badge">GS</span>
+        <div>
+          <div class="gs-label">Portfolio Review</div>
+          <div class="gs-analyst" id="gsDate">GS Investment Intelligence · March 2026</div>
+        </div>
+      </div>
+      <div class="gs-section">
+        <div class="gs-section-title">📊 Portfolio Thesis</div>
+        <div class="gs-text" id="gsThesis">Loading analysis...</div>
+      </div>
+      <div class="gs-section">
+        <div class="gs-section-title">⚡ Active Recommendations</div>
+        <div id="gsRecs">Loading recommendations...</div>
+      </div>
+      <div class="gs-section">
+        <div class="gs-section-title">⚠️ Risk Flags</div>
+        <div id="gsRisks">Loading risk analysis...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- GS RESEARCH DESK — EQUITY SCREENING -->
+  <div class="section-title" style="margin-top:8px;">GS Research Desk — Equity Screening Report</div>
+  <div class="research-desk-card" id="researchDesk">
+    <div class="news-placeholder">Generating equity screening report...</div>
+  </div>
+
+  <!-- MACRO INDICATORS -->
+  <div class="section-title">Macro Indicators</div>
+  <div class="macro-grid" id="macroGrid">
+    <div class="macro-card"><div><div class="macro-label">Gold (XAU/USD)</div><div class="macro-value" id="goldPrice">—</div><div class="macro-change" id="goldChange">—</div></div><div class="macro-icon">🥇</div></div>
+    <div class="macro-card"><div><div class="macro-label">Silver (XAG/USD)</div><div class="macro-value" id="silverPrice">—</div><div class="macro-change" id="silverChange">—</div></div><div class="macro-icon">🥈</div></div>
+    <div class="macro-card"><div><div class="macro-label">Bitcoin (CAD)</div><div class="macro-value" id="btcPrice">—</div><div class="macro-change" id="btcChange">—</div></div><div class="macro-icon">₿</div></div>
+    <div class="macro-card"><div><div class="macro-label">S&P 500</div><div class="macro-value" id="sp500Price">—</div><div class="macro-change" id="sp500Change">—</div></div><div class="macro-icon">📈</div></div>
+    <div class="macro-card"><div><div class="macro-label">USD/CAD</div><div class="macro-value" id="usdcadPrice">—</div><div class="macro-change" id="usdcadChange">—</div></div><div class="macro-icon">💱</div></div>
+    <div class="macro-card"><div><div class="macro-label">TSX Composite</div><div class="macro-value" id="tsxPrice">—</div><div class="macro-change" id="tsxChange">—</div></div><div class="macro-icon">🍁</div></div>
+    <div class="macro-card"><div><div class="macro-label">Crude Oil (WTI)</div><div class="macro-value" id="oilPrice">—</div><div class="macro-change" id="oilChange">—</div></div><div class="macro-icon">🛢️</div></div>
+    <div class="macro-card"><div><div class="macro-label">Copper (HG)</div><div class="macro-value" id="copperPrice">—</div><div class="macro-change" id="copperChange">—</div></div><div class="macro-icon">🔶</div></div>
+  </div>
+
+  <!-- HOLDINGS TABLE -->
+  <div class="section-title">Holdings</div>
+  <div class="card" style="margin-bottom:24px;">
+    <div class="holdings-filter">
+      <button class="filter-btn active" onclick="filterHoldings('all', this)">All Accounts</button>
+      <button class="filter-btn" onclick="filterHoldings('TFSA', this)">TFSA</button>
+      <button class="filter-btn" onclick="filterHoldings('RRSP', this)">RRSP</button>
+      <button class="filter-btn" onclick="filterHoldings('Crypto', this)">Crypto</button>
+      <button class="filter-btn" onclick="filterHoldings('Precious Metals', this)">Precious Metals</button>
+      <button class="filter-btn" onclick="filterHoldings('Tech', this)">Tech</button>
+    </div>
+    <div class="period-filter">
+      <span class="period-label">Period:</span>
+      <button class="period-btn active" onclick="filterPeriod('today', this)">24H</button>
+      <button class="period-btn" onclick="filterPeriod('1W', this)">1W</button>
+      <button class="period-btn" onclick="filterPeriod('4W', this)">4W</button>
+      <button class="period-btn" onclick="filterPeriod('13W', this)">13W</button>
+      <button class="period-btn" onclick="filterPeriod('26W', this)">26W</button>
+      <button class="period-btn" onclick="filterPeriod('52W', this)">52W</button>
+      <button class="period-btn" onclick="filterPeriod('YTD', this)">YTD</button>
+      <span class="hist-loading" id="histLoading">⟳ Loading history...</span>
+    </div>
+    <div class="table-wrapper">
+      <table id="holdingsTable">
+        <thead>
+          <tr>
+            <th>Symbol</th>
+            <th>Name</th>
+            <th>Account</th>
+            <th>Qty</th>
+            <th>Price</th>
+            <th id="valueColHeader">Value (CAD)</th>
+            <th id="chgColHeader">24H Chg</th>
+            <th id="chgPctColHeader">24H Chg %</th>
+            <th>Portfolio %</th>
+          </tr>
+        </thead>
+        <tbody id="holdingsBody">
+          <tr><td colspan="9" class="loading-cell" style="text-align:center;padding:24px;">Loading holdings data...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- NEWS FEEDS -->
+  <div class="section-title">Market Intelligence</div>
+  <div class="news-grid">
+    <div class="news-feed">
+      <div class="news-feed-header">
+        <div style="font-size:12px;font-weight:700;color:var(--gold)">🥇 Precious Metals & Macro</div>
+        <span class="news-refresh-time" id="newsMetalsTime"></span>
+      </div>
+      <div id="newsMetals"><div class="news-placeholder">Loading news...</div></div>
+    </div>
+    <div class="news-feed">
+      <div class="news-feed-header">
+        <div style="font-size:12px;font-weight:700;color:var(--gold)">₿ Crypto & Digital Assets</div>
+        <span class="news-refresh-time" id="newsCryptoTime"></span>
+      </div>
+      <div id="newsCrypto"><div class="news-placeholder">Loading news...</div></div>
+    </div>
+    <div class="news-feed">
+      <div class="news-feed-header">
+        <div style="font-size:12px;font-weight:700;color:var(--gold)">⚡ Energy & Resources</div>
+        <span class="news-refresh-time" id="newsEnergyTime"></span>
+      </div>
+      <div id="newsEnergy"><div class="news-placeholder">Loading news...</div></div>
+    </div>
+  </div>
+</div>
+<div class="footer">
+  GS Portfolio Intelligence Dashboard v1.5 · Data sourced from Yahoo Finance (incl. crypto) · For informational purposes only · Not financial advice<br>
+  Positions derived from WealthSimple activity export · TSX: ^GSPTSE · Premium news: Bloomberg · Reuters · FT · Economist · WSJ · Last refreshed: <span id="footerTime">—</span>
+</div>
+
+<script>
+// ============================================================
+// PORTFOLIO DATA — Derived from WealthSimple Activity Export
+// ============================================================
+const HOLDINGS = [
+  // ── TFSA CAD ── Broad Market
+  { symbol:'VFV',   yahoo:'VFV.TO',   name:'Vanguard S&P 500 ETF',                  qty:20.000,  currency:'CAD', account:'TFSA',   cat:'Broad Market', catKey:'broad' },
+  { symbol:'XUU',   yahoo:'XUU.TO',   name:'iShares Core S&P US Total Mkt',         qty:20.000,  currency:'CAD', account:'TFSA',   cat:'Broad Market', catKey:'broad' },
+  { symbol:'QQQ',   yahoo:'QQQ',      name:'Invesco QQQ Trust (NASDAQ 100)',         qty:6.9999,  currency:'USD', account:'TFSA',   cat:'Tech/Growth',  catKey:'tech' },
+  { symbol:'XIC',   yahoo:'XIC.TO',   name:'iShares Core S&P/TSX Composite',        qty:20.000,  currency:'CAD', account:'TFSA',   cat:'Canada',       catKey:'canada' },
+  // ── TFSA CAD — Precious Metals
+  { symbol:'OUNZ',  yahoo:'OUNZ',     name:'VanEck Merk Gold Trust',                qty:45.000,  currency:'USD', account:'TFSA',   cat:'Gold',         catKey:'gold' },
+  { symbol:'SLV',   yahoo:'SLV',      name:'iShares Silver Trust',                  qty:4.000,   currency:'USD', account:'TFSA',   cat:'Silver',       catKey:'silver' },
+  { symbol:'COPX',  yahoo:'COPX',     name:'Global X Copper ETF',                   qty:2.000,   currency:'USD', account:'TFSA',   cat:'Copper',       catKey:'gold' },
+  { symbol:'ICOP',  yahoo:'ICOP',     name:'iShares Copper & Metals Mining ETF',    qty:2.000,   currency:'USD', account:'TFSA',   cat:'Copper',       catKey:'gold' },
+  // ── TFSA CAD — Energy Transition
+  { symbol:'HCLN',  yahoo:'HCLN.TO',  name:'Harvest Clean Energy ETF',              qty:13.000,  currency:'CAD', account:'TFSA',   cat:'Clean Energy', catKey:'energy' },
+  { symbol:'BATT',  yahoo:'BATT',     name:'Amplify Lithium & Battery Tech ETF',    qty:5.000,   currency:'USD', account:'TFSA',   cat:'Battery/EV',   catKey:'energy' },
+  { symbol:'ION',   yahoo:'ION',      name:'ProShares S&P Global Core Battery ETF', qty:4.000,   currency:'USD', account:'TFSA',   cat:'Battery/EV',   catKey:'energy' },
+  { symbol:'HLIT',  yahoo:'HLIT.TO',  name:'Global X Lithium Producers Index ETF',  qty:5.000,   currency:'CAD', account:'TFSA',   cat:'Battery/EV',   catKey:'energy' },
+  { symbol:'NLR',   yahoo:'NLR',      name:'VanEck Uranium + Nuclear ETF',          qty:5.000,   currency:'USD', account:'TFSA',   cat:'Uranium/Nuclear', catKey:'uranium' },
+  { symbol:'SASK',  yahoo:'SASK.V',   name:'Atha Energy Corp (Uranium)',             qty:100.000, currency:'CAD', account:'TFSA',   cat:'Uranium/Nuclear', catKey:'uranium' },
+  // ── TFSA CAD — Tech
+  { symbol:'NVDA',  yahoo:'NVDA',     name:'NVIDIA Corp',                           qty:10.000,  currency:'USD', account:'TFSA',   cat:'Tech/Growth',  catKey:'tech' },
+  { symbol:'AMZN',  yahoo:'AMZN',     name:'Amazon.com Inc.',                       qty:4.000,   currency:'USD', account:'TFSA',   cat:'Tech/Growth',  catKey:'tech' },
+  { symbol:'GOOG',  yahoo:'GOOG',     name:'Alphabet Inc.',                         qty:1.000,   currency:'USD', account:'TFSA',   cat:'Tech/Growth',  catKey:'tech' },
+  { symbol:'MSFT',  yahoo:'MSFT',     name:'Microsoft Corp.',                       qty:1.000,   currency:'USD', account:'TFSA',   cat:'Tech/Growth',  catKey:'tech' },
+  { symbol:'SHOP',  yahoo:'SHOP.TO',  name:'Shopify Inc.',                          qty:2.000,   currency:'CAD', account:'TFSA',   cat:'Tech/Growth',  catKey:'tech' },
+  { symbol:'CIBR',  yahoo:'CIBR',     name:'First Trust Nasdaq Cybersecurity ETF',  qty:9.000,   currency:'USD', account:'TFSA',   cat:'Cybersecurity', catKey:'tech' },
+  // ── TFSA CAD — Individual / Other
+  { symbol:'COST',  yahoo:'COST.NE',  name:'Costco CDR (CAD Hedged)',               qty:5.000,   currency:'CAD', account:'TFSA',   cat:'Consumer',     catKey:'individual' },
+  { symbol:'BA',    yahoo:'BA',       name:'Boeing Co.',                            qty:1.000,   currency:'USD', account:'TFSA',   cat:'Aerospace',    catKey:'individual' },
+  { symbol:'BCE',   yahoo:'BCE.TO',   name:'BCE Inc.',                              qty:1.000,   currency:'CAD', account:'TFSA',   cat:'Telecom',      catKey:'individual' },
+  { symbol:'CJT',   yahoo:'CJT.TO',   name:'Cargojet Inc.',                         qty:1.000,   currency:'CAD', account:'TFSA',   cat:'Transport',    catKey:'individual' },
+  { symbol:'BYND',  yahoo:'BYND',     name:'Beyond Meat Inc.',                      qty:1.000,   currency:'USD', account:'TFSA',   cat:'Consumer',     catKey:'individual' },
+  { symbol:'KVUE',  yahoo:'KVUE',     name:'Kenvue Inc.',                           qty:1.000,   currency:'USD', account:'TFSA',   cat:'Consumer',     catKey:'individual' },
+  { symbol:'CASH',  yahoo:'CASH.TO',  name:'Global X High Interest Savings ETF',   qty:1.000,   currency:'CAD', account:'TFSA',   cat:'Cash/Fixed',   catKey:'broad' },
+  { symbol:'PSYK',  yahoo:'PSYK.TO',  name:'Horizons Psychedelic Stock Index ETF',  qty:2.250,   currency:'CAD', account:'TFSA',   cat:'Thematic',     catKey:'thematic' },
+  // ── RRSP
+  { symbol:'VFV',   yahoo:'VFV.TO',   name:'Vanguard S&P 500 ETF',                  qty:8.939,   currency:'CAD', account:'RRSP',   cat:'Broad Market', catKey:'broad' },
+  { symbol:'XUU',   yahoo:'XUU.TO',   name:'iShares Core S&P US Total Mkt',         qty:19.601,  currency:'CAD', account:'RRSP',   cat:'Broad Market', catKey:'broad' },
+  { symbol:'XGD',   yahoo:'XGD.TO',   name:'iShares S&P/TSX Global Gold ETF',       qty:6.108,   currency:'CAD', account:'RRSP',   cat:'Gold Miners',  catKey:'gold' },
+  // ── CRYPTO — Yahoo Finance supports ETH-CAD, SOL-CAD, AAVE-CAD natively
+  { symbol:'AAVE',  yahoo:'AAVE-CAD', name:'Aave (DeFi Protocol)',                  qty:1.7405,  currency:'CAD', account:'Crypto', cat:'DeFi/Crypto',  catKey:'crypto', cgId:'aave' },
+  { symbol:'ETH',   yahoo:'ETH-CAD',  name:'Ethereum',                              qty:0.0529,  currency:'CAD', account:'Crypto', cat:'DeFi/Crypto',  catKey:'crypto', cgId:'ethereum' },
+  { symbol:'SOL',   yahoo:'SOL-CAD',  name:'Solana',                                qty:1.7789,  currency:'CAD', account:'Crypto', cat:'DeFi/Crypto',  catKey:'crypto', cgId:'solana' },
+];
+
+// ============================================================
+// UNDEPLOYED CAPITAL — Available cash per account (from WealthSimple)
+// Updated: March 2026
+// ============================================================
+const UNDEPLOYED_CAPITAL = {
+  TFSA:   { cad: 1090.34, usdExplicit: 638.65 },  // TFSA holds both CAD cash + USD cash explicitly
+  RRSP:   { cad: 1740.89, usdExplicit: null    },  // RRSP is CAD; USD equiv computed from live rate
+  Crypto: { cad: 367.27,  usdExplicit: null    },  // Crypto wallet cash in CAD
+};
+
+// Undeployed filter state
+let undeployedFilter = 'all';
+
+// Macro-only Yahoo symbols (not in HOLDINGS but needed for the dashboard)
+// FIX: All macro fetched via Yahoo Finance — replaces Stooq which had no prevClose (no day change)
+// FIX: BTC-CAD added here — previously never fetched, macro BTC card always showed —
+const MACRO_ONLY_SYMBOLS = ['GC=F', 'SI=F', '^GSPC', 'USDCAD=X', '^GSPTSE', 'CL=F', 'HG=F', 'BTC-CAD'];
+
+// ============================================================
+// STATE
+// ============================================================
+let priceMap = {};        // yahoo symbol → { price, prevClose, currency }
+let periodPriceMap = {};  // yahoo symbol → { '1W', '4W', '13W', '26W', '52W', 'YTD' } → price
+let usdcadRate = 1.39;    // fallback until live rate fetched
+let currentFilter = 'all';
+let currentPeriod = 'today';
+let historicalFetched = false;
+let allocationChart = null;
+let cryptoPrices = {};    // cgId → { cad, usd, change_pct } — CoinGecko/CoinCap fallback
+let displayCurrency = 'CAD'; // 'CAD' or 'USD'
+
+// ============================================================
+// UTILITIES
+// ============================================================
+const fmtCAD = (v, dec=0) => v != null && !isNaN(v)
+  ? '$' + v.toLocaleString('en-CA', {minimumFractionDigits:dec, maximumFractionDigits:dec})
+  : '—';
+
+// FIX: fmtDisplay respects the CAD/USD toggle
+const fmtDisplay = (v, dec=0) => {
+  if (v == null || isNaN(v)) return '—';
+  const amount = displayCurrency === 'USD' ? v / usdcadRate : v;
+  const sym = displayCurrency === 'USD' ? 'US$' : '$';
+  return sym + amount.toLocaleString('en-CA', {minimumFractionDigits:dec, maximumFractionDigits:dec});
+};
+
+// ============================================================
+// PRIVACY TOGGLE — blur all balance values for screen sharing
+// ============================================================
+let privacyMode = false;
+
+function togglePrivacyMode() {
+  privacyMode = !privacyMode;
+  const btn = document.getElementById('privacyToggleBtn');
+  if (privacyMode) {
+    document.body.classList.add('balances-hidden');
+    if (btn) { btn.textContent = '🙈 Show Balances'; btn.classList.add('active'); }
+  } else {
+    document.body.classList.remove('balances-hidden');
+    if (btn) { btn.textContent = '👁 Hide Balances'; btn.classList.remove('active'); }
+  }
+}
+
+function toggleDisplayCurrency() {
+  displayCurrency = displayCurrency === 'CAD' ? 'USD' : 'CAD';
+  const btn = document.getElementById('currencyToggleBtn');
+  if (btn) btn.textContent = displayCurrency === 'CAD' ? '🇨🇦 CAD' : '🇺🇸 USD';
+  const currLabel = displayCurrency === 'CAD' ? 'CAD' : 'USD';
+  const els = {
+    totalValueLabel:  `Total Portfolio incl. Cash (${currLabel} est.)`,
+    tfsaValueLabel:   `TFSA (${currLabel})`,
+    rrspValueLabel:   `RRSP (${currLabel})`,
+    cryptoValueLabel: `Crypto (${currLabel} est.)`,
+    valueColHeader:   `Value (${currLabel})`,
+  };
+  Object.entries(els).forEach(([id, text]) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = text;
+  });
+  renderSummary();
+  renderHoldings();
+}
+
+const fmtPct = (v) => v != null && !isNaN(v)
+  ? (v >= 0 ? '+' : '') + v.toFixed(2) + '%'
+  : '—';
+
+const colorPct = (v) => v == null || isNaN(v) ? '' : v >= 0 ? 'positive' : 'negative';
+
+function getHoldingPrice(h) {
+  if (!h.yahoo) return null;
+  const p = priceMap[h.yahoo];
+  if (!p) return null;
+  if (h.currency === 'USD') return p.price * usdcadRate;
+  return p.price;
+}
+
+function getHoldingPrevClose(h) {
+  if (!h.yahoo) return null;
+  const p = priceMap[h.yahoo];
+  if (!p) return null;
+  if (h.currency === 'USD') return p.prevClose != null ? p.prevClose * usdcadRate : null;
+  return p.prevClose;
+}
+
+function getHoldingValue(h) {
+  if (h.yahoo) {
+    const price = getHoldingPrice(h);
+    if (price != null) return h.qty * price;
+  }
+  if (h.cgId) {
+    const cp = cryptoPrices[h.cgId];
+    if (!cp) return null;
+    return h.qty * cp.cad;
+  }
+  return null;
+}
+
+// ============================================================
+// FETCH: Yahoo Finance Chart API — 3-proxy fallback chain
+// FIX: Previously only tried corsproxy.io with no fallback.
+//      If corsproxy.io is rate-limited all prices fail.
+//      Now tries allorigins.win and codetabs.com as backups.
+// ============================================================
+async function fetchYahooChart(symbol) {
+  const url = `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=2d&includePrePost=false`;
+  const proxies = [
+    `https://corsproxy.io/?${encodeURIComponent(url)}`,
+    `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+    `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+  ];
+  for (const proxyUrl of proxies) {
+    try {
+      const res = await fetch(proxyUrl, { cache:'no-store' });
+      if (!res.ok) continue;
+      const data = await res.json();
+      const meta = data?.chart?.result?.[0]?.meta;
+      if (!meta?.regularMarketPrice) continue;
+      priceMap[symbol] = {
+        price:     meta.regularMarketPrice,
+        prevClose: meta.chartPreviousClose ?? null,
+        currency:  meta.currency ?? 'USD',
+      };
+      return true;
+    } catch(_) {}
+  }
+  return false;
+}
+
+// ============================================================
+// FETCH: All prices — holdings + macro in one batched flow
+// FIX: Replaced Stooq (no prevClose = no day change on macro) with Yahoo Finance.
+//      All macro tickers now fetched via fetchYahooChart for consistency + prevClose support.
+// ============================================================
+async function fetchAllPrices() {
+  // Deduplicate holding symbols
+  const holdingSymbols = [...new Set(HOLDINGS.filter(h => h.yahoo).map(h => h.yahoo))];
+  // Combine with macro-only symbols (GC=F, BTC-CAD, etc.)
+  const allSymbols = [...new Set([...holdingSymbols, ...MACRO_ONLY_SYMBOLS])];
+
+  // Fetch in parallel batches of 8 to avoid overwhelming proxies
+  for (let i = 0; i < allSymbols.length; i += 8) {
+    const batch = allSymbols.slice(i, i + 8);
+    await Promise.allSettled(batch.map(sym => fetchYahooChart(sym)));
+  }
+
+  // Update live USD/CAD rate
+  const usdcad = priceMap['USDCAD=X'];
+  if (usdcad?.price) usdcadRate = usdcad.price;
+}
+
+// ============================================================
+// FETCH: Crypto — CoinGecko / CoinCap fallback
+// Yahoo Finance is the primary path (ETH-CAD, SOL-CAD, AAVE-CAD fetched above).
+// This function is a supplemental fallback only.
+// ============================================================
+async function fetchCryptoPrices() {
+  const ids = [...new Set(HOLDINGS.filter(h => h.cgId).map(h => h.cgId))];
+  if (!ids.length) return;
+
+  const cgUrl = `https://api.coingecko.com/api/v3/simple/price?ids=${ids.join(',')}&vs_currencies=cad,usd&include_24hr_change=true`;
+  let cgSuccess = false;
+  try {
+    const res = await fetch(`https://corsproxy.io/?${encodeURIComponent(cgUrl)}`, { cache:'no-store' });
+    if (res.ok) {
+      const data = await res.json();
+      if (!data?.status?.error_code) {
+        ids.forEach(id => {
+          if (data[id]?.cad) {
+            cryptoPrices[id] = { cad: data[id].cad, usd: data[id].usd, change_pct: data[id].cad_24h_change };
+          }
+        });
+        cgSuccess = true;
+      }
+    }
+  } catch(_) {}
+  if (cgSuccess) return;
+
+  // CoinCap.io fallback
+  const coinCapMap = { ethereum:'ethereum', solana:'solana', aave:'aave' };
+  await Promise.allSettled(ids.map(async id => {
+    if (cryptoPrices[id]) return;
+    const capId = coinCapMap[id];
+    if (!capId) return;
+    try {
+      const url = `https://api.coincap.io/v2/assets/${capId}`;
+      const res = await fetch(`https://corsproxy.io/?${encodeURIComponent(url)}`, { cache:'no-store' });
+      if (!res.ok) return;
+      const json = await res.json();
+      const d = json?.data;
+      if (!d?.priceUsd) return;
+      const usdPrice = parseFloat(d.priceUsd);
+      const chgPct   = parseFloat(d.changePercent24Hr);
+      if (!isNaN(usdPrice)) {
+        cryptoPrices[id] = {
+          cad: usdPrice * usdcadRate,
+          usd: usdPrice,
+          change_pct: isNaN(chgPct) ? null : chgPct,
+        };
+      }
+    } catch(_) {}
+  }));
+}
+
+// ============================================================
+// FETCH: Historical prices for period filters
+// FIX: Added proxy fallback chain (same as fetchYahooChart)
+// ============================================================
+async function fetchYahooHistory(symbol) {
+  const url = `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1y`;
+  const proxies = [
+    `https://corsproxy.io/?${encodeURIComponent(url)}`,
+    `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+    `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+  ];
+
+  for (const proxyUrl of proxies) {
+    try {
+      const res = await fetch(proxyUrl, { cache:'no-store' });
+      if (!res.ok) continue;
+      const data = await res.json();
+      const result = data?.chart?.result?.[0];
+      if (!result) continue;
+      const timestamps = result.timestamp || [];
+      const closes     = result.indicators?.quote?.[0]?.close || [];
+      if (!timestamps.length) continue;
+
+      const now = new Date();
+      const periodDates = {
+        '1W':  new Date(now.getTime() -  1 * 7 * 24 * 3600 * 1000),
+        '4W':  new Date(now.getTime() -  4 * 7 * 24 * 3600 * 1000),
+        '13W': new Date(now.getTime() - 13 * 7 * 24 * 3600 * 1000),
+        '26W': new Date(now.getTime() - 26 * 7 * 24 * 3600 * 1000),
+        '52W': new Date(now.getTime() - 52 * 7 * 24 * 3600 * 1000),
+        'YTD': new Date(now.getFullYear(), 0, 1),
+      };
+
+      if (!periodPriceMap[symbol]) periodPriceMap[symbol] = {};
+      Object.entries(periodDates).forEach(([key, targetDate]) => {
+        const targetTs = Math.floor(targetDate.getTime() / 1000);
+        for (let i = 0; i < timestamps.length; i++) {
+          if (timestamps[i] >= targetTs && closes[i] != null) {
+            periodPriceMap[symbol][key] = closes[i];
+            break;
+          }
+        }
+      });
+      return true;
+    } catch(_) {}
+  }
+  return false;
+}
+
+async function fetchHistoricalForPeriods() {
+  const loadEl = document.getElementById('histLoading');
+  if (loadEl) loadEl.style.display = 'inline';
+  const holdingSymbols = [...new Set(HOLDINGS.filter(h => h.yahoo).map(h => h.yahoo))];
+  for (let i = 0; i < holdingSymbols.length; i += 6) {
+    const batch = holdingSymbols.slice(i, i + 6);
+    await Promise.allSettled(batch.map(sym => fetchYahooHistory(sym)));
+  }
+  historicalFetched = true;
+  if (loadEl) loadEl.style.display = 'none';
+  if (currentPeriod !== 'today') renderHoldings();
+}
+
+function getHoldingPeriodChange(h, period) {
+  if (!h.yahoo) return null;
+  const cur = priceMap[h.yahoo];
+  if (!cur || !cur.price) return null;
+
+  if (period === 'today') {
+    if (!cur.prevClose) return null;
+    const pct = (cur.price - cur.prevClose) / cur.prevClose * 100;
+    const absNative = (cur.price - cur.prevClose) * h.qty;
+    const absCAD = h.currency === 'USD' ? absNative * usdcadRate : absNative;
+    return { pct, absCAD };
+  }
+
+  const hist = periodPriceMap[h.yahoo];
+  if (!hist || !hist[period]) return null;
+  const start = hist[period];
+  const pct = (cur.price - start) / start * 100;
+  const absNative = (cur.price - start) * h.qty;
+  const absCAD = h.currency === 'USD' ? absNative * usdcadRate : absNative;
+  return { pct, absCAD };
+}
+
+// ============================================================
+// RENDER: Undeployed Capital Section
+// ============================================================
+function setUndeployedFilter(filter, btn) {
+  undeployedFilter = filter;
+  document.querySelectorAll('.undeploy-toggle .filter-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  renderUndeployedCapital();
+}
+
+function renderUndeployedCapital() {
+  const grid = document.getElementById('undeployedGrid');
+  if (!grid) return;
+
+  // USD equivalents: use explicit value for TFSA, compute from live rate for others
+  const tfsaUSD  = UNDEPLOYED_CAPITAL.TFSA.usdExplicit;
+  const rrspUSD  = UNDEPLOYED_CAPITAL.RRSP.cad  / usdcadRate;
+  const cryptoUSD= UNDEPLOYED_CAPITAL.Crypto.cad / usdcadRate;
+
+  const totCAD = UNDEPLOYED_CAPITAL.TFSA.cad + UNDEPLOYED_CAPITAL.RRSP.cad + UNDEPLOYED_CAPITAL.Crypto.cad;
+  const totUSD = tfsaUSD + rrspUSD + cryptoUSD;
+
+  // Total invested (for % calculation)
+  const withValues   = HOLDINGS.map(h => ({ ...h, value: getHoldingValue(h) || 0 }));
+  const investedVal  = withValues.reduce((s, h) => s + h.value, 0);
+  const grandTotal   = investedVal + totCAD;
+  const cashPct      = grandTotal > 0 ? (totCAD / grandTotal * 100).toFixed(1) : '—';
+
+  const fmt    = (v, dec=0) => v != null ? '$' + v.toLocaleString('en-CA', {minimumFractionDigits:dec, maximumFractionDigits:dec}) : '—';
+  const fmtUSD = (v, dec=0) => v != null ? 'US$' + v.toLocaleString('en-CA', {minimumFractionDigits:dec, maximumFractionDigits:dec}) : '—';
+
+  const readyBadge = `<div class="undeploy-ready"><div class="ready-dot"></div>Ready to Deploy</div>`;
+
+  let html = '';
+
+  if (undeployedFilter === 'all') {
+    // Card 1: Total CAD
+    html += `<div class="undeploy-card primary">
+      <div class="undeploy-acct-pill pill-all">🏦 All Accounts</div>
+      <div class="undeploy-value">${fmt(totCAD)}</div>
+      <div class="undeploy-sub">Total available (CAD)<br>${cashPct}% of total portfolio</div>
+      ${readyBadge}
+    </div>`;
+    // Card 2: Total USD equiv
+    html += `<div class="undeploy-card">
+      <div class="undeploy-acct-pill pill-usd">🇺🇸 USD Equivalent</div>
+      <div class="undeploy-value">${fmtUSD(totUSD)}</div>
+      <div class="undeploy-sub">At ${usdcadRate.toFixed(4)} USD/CAD<br>Combined all accounts</div>
+    </div>`;
+    // Card 3: TFSA
+    html += `<div class="undeploy-card">
+      <div class="undeploy-acct-pill pill-tfsa">TFSA</div>
+      <div class="undeploy-value">${fmt(UNDEPLOYED_CAPITAL.TFSA.cad)}</div>
+      <div class="undeploy-sub">CAD cash available<br>${fmtUSD(tfsaUSD)} USD (explicit balance)</div>
+    </div>`;
+    // Card 4: RRSP
+    html += `<div class="undeploy-card">
+      <div class="undeploy-acct-pill pill-rrsp">RRSP</div>
+      <div class="undeploy-value">${fmt(UNDEPLOYED_CAPITAL.RRSP.cad)}</div>
+      <div class="undeploy-sub">CAD cash available<br>${fmtUSD(rrspUSD)} USD equiv.</div>
+    </div>`;
+    // Card 5: Crypto wallet
+    html += `<div class="undeploy-card">
+      <div class="undeploy-acct-pill pill-crypto">Crypto</div>
+      <div class="undeploy-value">${fmt(UNDEPLOYED_CAPITAL.Crypto.cad)}</div>
+      <div class="undeploy-sub">Crypto wallet cash (CAD)<br>${fmtUSD(cryptoUSD)} USD equiv.</div>
+    </div>`;
+
+  } else if (undeployedFilter === 'TFSA') {
+    const acctCAD = UNDEPLOYED_CAPITAL.TFSA.cad;
+    const acctUSD = tfsaUSD;
+    const acctPct = grandTotal > 0 ? (acctCAD / grandTotal * 100).toFixed(1) : '—';
+    html += `<div class="undeploy-card primary">
+      <div class="undeploy-acct-pill pill-tfsa">TFSA</div>
+      <div class="undeploy-value">${fmt(acctCAD)}</div>
+      <div class="undeploy-sub">CAD cash balance<br>${acctPct}% of total portfolio</div>
+      ${readyBadge}
+    </div>`;
+    html += `<div class="undeploy-card">
+      <div class="undeploy-acct-pill pill-usd">USD Cash (explicit)</div>
+      <div class="undeploy-value">${fmtUSD(acctUSD)}</div>
+      <div class="undeploy-sub">USD balance as reported<br>by WealthSimple TFSA</div>
+    </div>`;
+    html += `<div class="undeploy-card">
+      <div class="undeploy-acct-pill pill-tfsa">CAD + USD Combined</div>
+      <div class="undeploy-value">${fmt(acctCAD + acctUSD * usdcadRate)}</div>
+      <div class="undeploy-sub">All TFSA cash (CAD equiv.)<br>USD converted at ${usdcadRate.toFixed(4)}</div>
+    </div>`;
+    html += `<div class="undeploy-card">
+      <div class="undeploy-acct-pill pill-tfsa">Buy Power (USD)</div>
+      <div class="undeploy-value">${fmtUSD(acctCAD / usdcadRate + acctUSD)}</div>
+      <div class="undeploy-sub">Total TFSA buying power<br>denominated in USD</div>
+    </div>`;
+    html += `<div class="undeploy-card">
+      <div class="undeploy-acct-pill pill-all">% of Portfolio</div>
+      <div class="undeploy-value">${acctPct}%</div>
+      <div class="undeploy-sub">TFSA cash as % of<br>total portfolio incl. cash</div>
+    </div>`;
+
+  } else if (undeployedFilter === 'RRSP') {
+    const acctCAD = UNDEPLOYED_CAPITAL.RRSP.cad;
+    const acctPct = grandTotal > 0 ? (acctCAD / grandTotal * 100).toFixed(1) : '—';
+    html += `<div class="undeploy-card primary">
+      <div class="undeploy-acct-pill pill-rrsp">RRSP</div>
+      <div class="undeploy-value">${fmt(acctCAD)}</div>
+      <div class="undeploy-sub">CAD cash available<br>${acctPct}% of total portfolio</div>
+      ${readyBadge}
+    </div>`;
+    html += `<div class="undeploy-card">
+      <div class="undeploy-acct-pill pill-usd">USD Equivalent</div>
+      <div class="undeploy-value">${fmtUSD(rrspUSD)}</div>
+      <div class="undeploy-sub">Computed at live rate<br>${usdcadRate.toFixed(4)} USD/CAD</div>
+    </div>`;
+    html += `<div class="undeploy-card">
+      <div class="undeploy-acct-pill pill-rrsp">Buying Power</div>
+      <div class="undeploy-value">~${Math.floor(acctCAD / 490)} shares</div>
+      <div class="undeploy-sub">BRK-B equivalent lots<br>at approx. C$${(490 * usdcadRate).toFixed(0)}/share</div>
+    </div>`;
+    html += `<div class="undeploy-card">
+      <div class="undeploy-acct-pill pill-rrsp">Tax Note</div>
+      <div class="undeploy-value" style="font-size:14px">0% withhold</div>
+      <div class="undeploy-sub">US dividends in RRSP are<br>exempt from 15% US WHT</div>
+    </div>`;
+    html += `<div class="undeploy-card">
+      <div class="undeploy-acct-pill pill-all">% of Portfolio</div>
+      <div class="undeploy-value">${acctPct}%</div>
+      <div class="undeploy-sub">RRSP cash as % of<br>total portfolio incl. cash</div>
+    </div>`;
+
+  } else if (undeployedFilter === 'Crypto') {
+    const acctCAD = UNDEPLOYED_CAPITAL.Crypto.cad;
+    const acctPct = grandTotal > 0 ? (acctCAD / grandTotal * 100).toFixed(1) : '—';
+    html += `<div class="undeploy-card primary">
+      <div class="undeploy-acct-pill pill-crypto">Crypto Wallet</div>
+      <div class="undeploy-value">${fmt(acctCAD)}</div>
+      <div class="undeploy-sub">Stablecoin / cash in wallet<br>${acctPct}% of total portfolio</div>
+      ${readyBadge}
+    </div>`;
+    html += `<div class="undeploy-card">
+      <div class="undeploy-acct-pill pill-usd">USD Equivalent</div>
+      <div class="undeploy-value">${fmtUSD(cryptoUSD)}</div>
+      <div class="undeploy-sub">Computed at live rate<br>${usdcadRate.toFixed(4)} USD/CAD</div>
+    </div>`;
+    html += `<div class="undeploy-card">
+      <div class="undeploy-acct-pill pill-crypto">AAVE Buys</div>
+      <div class="undeploy-value">~${(acctCAD / (priceMap['AAVE-CAD']?.price || 300)).toFixed(2)}</div>
+      <div class="undeploy-sub">AAVE units at live price<br>if fully deployed to AAVE</div>
+    </div>`;
+    html += `<div class="undeploy-card">
+      <div class="undeploy-acct-pill pill-crypto">ETH Buys</div>
+      <div class="undeploy-value">~${(acctCAD / (priceMap['ETH-CAD']?.price || 4000)).toFixed(4)}</div>
+      <div class="undeploy-sub">ETH units at live price<br>if fully deployed to ETH</div>
+    </div>`;
+    html += `<div class="undeploy-card">
+      <div class="undeploy-acct-pill pill-all">% of Portfolio</div>
+      <div class="undeploy-value">${acctPct}%</div>
+      <div class="undeploy-sub">Crypto cash as % of<br>total portfolio incl. cash</div>
+    </div>`;
+  }
+
+  grid.innerHTML = html;
+}
+
+// ============================================================
+// RENDER: Currency Split + FX Table
+// ============================================================
+function renderCurrencySplit() {
+  let usdTotal = 0, cadTotal = 0, usdCount = 0, cadCount = 0;
+  HOLDINGS.forEach(h => {
+    if (h.cgId) {
+      const cp = cryptoPrices[h.cgId];
+      if (cp?.cad) { cadTotal += h.qty * cp.cad; cadCount++; }
+      return;
+    }
+    const val = getHoldingValue(h);
+    if (val == null) return;
+    if (h.currency === 'USD') { usdTotal += val; usdCount++; }
+    else { cadTotal += val; cadCount++; }
+  });
+
+  const usdEl      = document.getElementById('usdHoldingsCAD');
+  const cadEl      = document.getElementById('cadHoldingsCAD');
+  const usdCountEl = document.getElementById('usdHoldingsCount');
+  const cadCountEl = document.getElementById('cadHoldingsCount');
+  if (usdEl)      usdEl.textContent      = usdTotal > 0 ? fmtCAD(usdTotal) : '—';
+  if (cadEl)      cadEl.textContent      = cadTotal > 0 ? fmtCAD(cadTotal) : '—';
+  if (usdCountEl) usdCountEl.textContent = usdCount + ' positions';
+  if (cadCountEl) cadCountEl.textContent = cadCount + ' positions';
+
+  const tbody = document.getElementById('fxTableBody');
+  if (!tbody) return;
+  const d = priceMap['USDCAD=X'];
+  let rows = '';
+  if (d) {
+    const chg    = d.prevClose ? d.price - d.prevClose : null;
+    const chgPct = chg != null && d.prevClose ? chg / d.prevClose * 100 : null;
+    const cls    = chgPct == null ? '' : chgPct >= 0 ? 'positive' : 'negative';
+    rows += `<tr>
+      <td style="font-weight:700;color:var(--text-primary);font-size:13px">USD / CAD</td>
+      <td style="text-align:right;font-weight:800;color:var(--gold-light);font-size:15px" class="fx-rate-val">${d.price.toFixed(4)}</td>
+      <td style="text-align:right" class="${cls} fx-rate-val">${chg != null ? (chg >= 0 ? '+' : '') + chg.toFixed(4) : '—'}</td>
+      <td style="text-align:right" class="${cls} fx-rate-val">${chgPct != null ? fmtPct(chgPct) : '—'}</td>
+    </tr>`;
+  }
+  const rate = priceMap['USDCAD=X']?.price || usdcadRate;
+  rows += `<tr style="border-top:1px solid var(--border)">
+    <td style="color:var(--text-muted);font-size:11px;padding-top:10px">$1 USD =</td>
+    <td colspan="3" style="text-align:right;color:var(--text-secondary);font-size:11px;padding-top:10px">$${rate.toFixed(4)} CAD</td>
+  </tr>
+  <tr>
+    <td style="color:var(--text-muted);font-size:11px">$1 CAD =</td>
+    <td colspan="3" style="text-align:right;color:var(--text-secondary);font-size:11px">$${(1/rate).toFixed(4)} USD</td>
+  </tr>`;
+  tbody.innerHTML = rows || '<tr><td colspan="4" style="color:var(--text-muted);font-size:12px;padding:8px 0;text-align:center">Loading...</td></tr>';
+}
+
+// ============================================================
+// RENDER: Summary Cards
+// ============================================================
+function renderSummary() {
+  const tfsaHoldings   = HOLDINGS.filter(h => h.account === 'TFSA');
+  const rrspHoldings   = HOLDINGS.filter(h => h.account === 'RRSP');
+  const cryptoHoldings = HOLDINGS.filter(h => h.account === 'Crypto');
+  const metalsHoldings = HOLDINGS.filter(h => ['Gold','Silver','Copper','Gold Miners'].includes(h.cat));
+
+  const sumValues = (arr) => {
+    let total = 0, hasAny = false;
+    arr.forEach(h => { const v = getHoldingValue(h); if (v != null) { total += v; hasAny = true; } });
+    return hasAny ? total : null;
+  };
+
+  const tfsaVal   = sumValues(tfsaHoldings);
+  const rrspVal   = sumValues(rrspHoldings);
+  const cryptoVal = sumValues(cryptoHoldings);
+  const metalsVal = sumValues(metalsHoldings);
+  const totalVal  = (tfsaVal ?? 0) + (rrspVal ?? 0) + (cryptoVal ?? 0);
+
+  let totalDayChg = 0;
+  HOLDINGS.forEach(h => {
+    if (h.yahoo) {
+      const price = getHoldingPrice(h);
+      const prev  = getHoldingPrevClose(h);
+      if (price != null && prev != null) { totalDayChg += h.qty * (price - prev); return; }
+    }
+    if (h.cgId && cryptoPrices[h.cgId]) {
+      const cp = cryptoPrices[h.cgId];
+      if (cp.change_pct != null) {
+        const prevCad = cp.cad / (1 + cp.change_pct / 100);
+        totalDayChg += h.qty * (cp.cad - prevCad);
+      }
+    }
+  });
+
+  // Add undeployed capital (all in CAD, convert USD-explicit portion at live rate)
+  const totalUndeployedCAD =
+    UNDEPLOYED_CAPITAL.TFSA.cad +
+    UNDEPLOYED_CAPITAL.RRSP.cad +
+    UNDEPLOYED_CAPITAL.Crypto.cad;
+  const grandTotal = (totalVal || 0) + totalUndeployedCAD;
+
+  document.getElementById('totalValue').textContent    = grandTotal ? fmtDisplay(grandTotal) : (totalVal ? fmtDisplay(totalVal) : '—');
+  document.getElementById('tfsaValue').textContent     = tfsaVal   ? fmtDisplay(tfsaVal)   : '—';
+  document.getElementById('rrspValue').textContent     = rrspVal   ? fmtDisplay(rrspVal)   : '—';
+  document.getElementById('cryptoValue').textContent   = cryptoVal ? fmtDisplay(cryptoVal) : '—';
+  document.getElementById('metalsValue').textContent   = metalsVal ? fmtDisplay(metalsVal) : '—';
+
+  // Sub-line: invested vs cash breakdown
+  const subEl = document.getElementById('totalInvestedSub');
+  if (subEl && totalVal) {
+    const cashPct = grandTotal > 0 ? (totalUndeployedCAD / grandTotal * 100).toFixed(1) : 0;
+    subEl.textContent = `Invested: ${fmtDisplay(totalVal)} · Cash: ${fmtDisplay(totalUndeployedCAD)} (${cashPct}%)`;
+  }
+
+  const chgEl = document.getElementById('totalDayChange');
+  chgEl.textContent = totalDayChg ? fmtDisplay(totalDayChg) + ' today' : 'Prices loading...';
+  chgEl.className = 'card-sub ' + (totalDayChg >= 0 ? 'positive' : 'negative');
+
+  document.getElementById('tfsaCount').textContent = tfsaHoldings.length + ' positions';
+  document.getElementById('rrspCount').textContent = rrspHoldings.length + ' positions';
+  if (metalsVal && totalVal) {
+    document.getElementById('metalsPct').textContent = (metalsVal / totalVal * 100).toFixed(1) + '% of portfolio';
+  }
+}
+
+// ============================================================
+// RENDER: Holdings Table
+// ============================================================
+function renderHoldings() {
+  const tbody = document.getElementById('holdingsBody');
+  const periodLabels = { today:'24H', '1W':'1W', '4W':'4W', '13W':'13W', '26W':'26W', '52W':'52W', YTD:'YTD' };
+  const pLabel = periodLabels[currentPeriod] || '24H';
+  const h1 = document.getElementById('chgColHeader');
+  const h2 = document.getElementById('chgPctColHeader');
+  if (h1) h1.textContent = pLabel + ' Chg';
+  if (h2) h2.textContent = pLabel + ' Chg %';
+
+  const withValues = HOLDINGS.map(h => ({ ...h, value: getHoldingValue(h) }));
+  const totalVal = withValues.reduce((s, h) => s + (h.value || 0), 0);
+  withValues.sort((a, b) => (b.value || 0) - (a.value || 0));
+
+  let filtered = withValues;
+  if (currentFilter !== 'all') {
+    if (['TFSA','RRSP','Crypto'].includes(currentFilter)) {
+      filtered = withValues.filter(h => h.account === currentFilter);
+    } else if (currentFilter === 'Precious Metals') {
+      filtered = withValues.filter(h => ['Gold','Silver','Copper','Gold Miners'].includes(h.cat));
+    } else if (currentFilter === 'Tech') {
+      filtered = withValues.filter(h => h.catKey === 'tech');
+    }
+  }
+
+  const catColors = {
+    broad:'cat-broad', gold:'cat-gold', silver:'cat-silver',
+    energy:'cat-energy', tech:'cat-tech', canada:'cat-canada',
+    crypto:'cat-crypto', thematic:'cat-thematic', uranium:'cat-uranium',
+    individual:'cat-individual'
+  };
+
+  tbody.innerHTML = filtered.map(h => {
+    let priceStr = '—', chgStr = '—', chgPctStr = '—', chgClass = '';
+
+    if (h.cgId) {
+      const yahooPrice = h.yahoo ? getHoldingPrice(h) : null;
+      const cp = cryptoPrices[h.cgId];
+      if (yahooPrice != null) {
+        priceStr = fmtCAD(yahooPrice, 2);
+        const periodChg = getHoldingPeriodChange(h, currentPeriod);
+        if (periodChg) {
+          chgStr = fmtCAD(periodChg.absCAD, 2);
+          chgPctStr = fmtPct(periodChg.pct);
+          chgClass = colorPct(periodChg.pct);
+        } else if (currentPeriod !== 'today' && !historicalFetched) {
+          chgStr = '...'; chgPctStr = '...';
+        }
+      } else if (cp) {
+        priceStr = fmtCAD(cp.cad, 2);
+        if (currentPeriod === 'today' && cp.change_pct != null) {
+          const prevCad = cp.cad / (1 + cp.change_pct / 100);
+          chgStr = fmtCAD(h.qty * (cp.cad - prevCad), 2);
+          chgPctStr = fmtPct(cp.change_pct);
+          chgClass = colorPct(cp.change_pct);
+        } else if (currentPeriod !== 'today') {
+          chgStr = '—'; chgPctStr = 'N/A';
+        }
+      }
+    } else {
+      const price = getHoldingPrice(h);
+      if (price != null) {
+        priceStr = fmtCAD(price, 2);
+        const periodChg = getHoldingPeriodChange(h, currentPeriod);
+        if (periodChg != null) {
+          chgStr = fmtCAD(periodChg.absCAD, 2);
+          chgPctStr = fmtPct(periodChg.pct);
+          chgClass = colorPct(periodChg.pct);
+        } else if (currentPeriod !== 'today' && !historicalFetched) {
+          chgStr = '...'; chgPctStr = '...';
+        }
+      }
+    }
+
+    const valStr  = h.value ? fmtDisplay(h.value) : '—';
+    const weight  = totalVal > 0 && h.value ? (h.value / totalVal * 100) : 0;
+    const barWidth = Math.min(weight * 3, 60);
+
+    return `<tr data-account="${h.account}" data-cat="${h.catKey}">
+      <td>
+        <div class="symbol-cell">
+          <span class="symbol-badge">${h.symbol}</span>
+          <span class="cat-badge ${catColors[h.catKey] || 'cat-individual'}">${h.cat}</span>
+        </div>
+      </td>
+      <td><div class="name-cell" title="${h.name}">${h.name}</div></td>
+      <td><span class="account-tag">${h.account}</span></td>
+      <td>${h.qty.toLocaleString('en', {maximumFractionDigits:4})}</td>
+      <td class="balance-mask">${priceStr}</td>
+      <td class="balance-mask"><strong>${valStr}</strong></td>
+      <td class="${chgClass} balance-mask">${chgStr}</td>
+      <td class="${chgClass} balance-mask">${chgPctStr}</td>
+      <td>
+        <div class="weight-bar">
+          <span style="font-size:11px;color:var(--text-secondary)">${weight > 0 ? weight.toFixed(1)+'%' : '—'}</span>
+          <div class="weight-fill" style="width:${barWidth}px;opacity:0.7"></div>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+// ============================================================
+// RENDER: Allocation Chart
+// ============================================================
+function renderChart() {
+  const categories = {};
+  HOLDINGS.forEach(h => {
+    const val = getHoldingValue(h);
+    if (!val) return;
+    const key = getCatGroup(h.catKey);
+    categories[key] = (categories[key] || 0) + val;
+  });
+
+  const sorted  = Object.entries(categories).sort((a,b) => b[1]-a[1]);
+  const labels  = sorted.map(e => e[0]);
+  const values  = sorted.map(e => e[1]);
+  const total   = values.reduce((s,v) => s+v, 0);
+  const palette = ['#c9a84c','#4a9eff','#e74c3c','#2ecc71','#9b59b6','#e67e22','#1abc9c','#e91e63','#3498db'];
+
+  if (allocationChart) allocationChart.destroy();
+  const ctx = document.getElementById('allocationChart').getContext('2d');
+  allocationChart = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels,
+      datasets: [{ data: values, backgroundColor: palette, borderColor: '#0a0c10', borderWidth: 2, hoverBorderWidth: 3 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: '65%',
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: (ctx) => ` ${fmtCAD(ctx.raw)} (${(ctx.raw/total*100).toFixed(1)}%)` } }
+      }
+    }
+  });
+
+  const legend = document.getElementById('chartLegend');
+  legend.innerHTML = sorted.map((e, i) => `
+    <div class="legend-item">
+      <div class="legend-dot" style="background:${palette[i % palette.length]}"></div>
+      <span style="color:var(--text-secondary)">${e[0]}</span>
+      <span style="margin-left:auto;color:var(--text-primary);font-weight:600">${(e[1]/total*100).toFixed(1)}%</span>
+    </div>`).join('');
+}
+
+function getCatGroup(catKey) {
+  const map = {
+    broad:'Broad Market', gold:'Precious Metals', silver:'Precious Metals',
+    energy:'Energy Transition', tech:'Technology', canada:'Canada',
+    crypto:'Crypto', thematic:'Thematic', uranium:'Uranium/Nuclear',
+    individual:'Individual Stocks'
+  };
+  return map[catKey] || catKey;
+}
+
+// ============================================================
+// RENDER: Macro Indicators
+// FIX: Now has prevClose data (from Yahoo) so day changes show
+// ============================================================
+function renderMacro() {
+  const indicators = [
+    { id:'gold',   sym:'GC=F',     prefix:'$', dec:0 },
+    { id:'silver', sym:'SI=F',     prefix:'$', dec:2 },
+    { id:'btc',    sym:'BTC-CAD',  prefix:'$', dec:0 },
+    { id:'sp500',  sym:'^GSPC',    prefix:'',  dec:0 },
+    { id:'usdcad', sym:'USDCAD=X', prefix:'',  dec:4 },
+    { id:'tsx',    sym:'^GSPTSE',  prefix:'',  dec:0 },
+    { id:'oil',    sym:'CL=F',     prefix:'$', dec:2 },
+    { id:'copper', sym:'HG=F',     prefix:'$', dec:3 },
+  ];
+  indicators.forEach(ind => {
+    const p = priceMap[ind.sym];
+    if (!p?.price) return;
+    const pEl = document.getElementById(ind.id + 'Price');
+    const cEl = document.getElementById(ind.id + 'Change');
+    if (!pEl) return;
+    pEl.textContent = ind.prefix + p.price.toLocaleString('en', {minimumFractionDigits:ind.dec, maximumFractionDigits:ind.dec});
+    if (p.prevClose) {
+      const chg    = p.price - p.prevClose;
+      const chgPct = chg / p.prevClose * 100;
+      cEl.textContent = (chg >= 0 ? '+' : '') + ind.prefix
+        + chg.toLocaleString('en', {minimumFractionDigits:ind.dec, maximumFractionDigits:ind.dec})
+        + ' (' + fmtPct(chgPct) + ')';
+      cEl.className = 'macro-change ' + (chg >= 0 ? 'positive' : 'negative');
+    }
+  });
+}
+
+// ============================================================
+// GOLDMAN SACHS ANALYSIS
+// ============================================================
+function renderGSAnalysis() {
+  const withValues = HOLDINGS.map(h => ({ ...h, value: getHoldingValue(h) || 0 }));
+  const totalVal   = withValues.reduce((s,h) => s + h.value, 0);
+  const catWeights = {};
+  withValues.forEach(h => {
+    const g = getCatGroup(h.catKey);
+    catWeights[g] = (catWeights[g] || 0) + h.value;
+  });
+  const pct = (key) => totalVal > 0 ? (catWeights[key] || 0) / totalVal * 100 : 0;
+  const broadPct   = pct('Broad Market');
+  const metalsPct  = pct('Precious Metals');
+  const cryptoPct  = pct('Crypto');
+  const uraniumPct = pct('Uranium/Nuclear');
+
+  const thesis = `Portfolio exhibits a <strong style="color:var(--gold-light)">dual-mandate structure</strong>: systematic long-term accumulation via broad index exposure (VFV/XUU, ~${broadPct.toFixed(0)}% combined) overlaid with high-conviction macro thematic bets.
+  <br><br>The <strong style="color:var(--gold-light)">${metalsPct.toFixed(0)}% precious metals allocation</strong> (OUNZ, SLV, XGD, COPX, ICOP) reflects a coherent thesis: monetary debasement, central bank gold accumulation, and USD reserve erosion. This is structural, not tactical.
+  <br><br>The energy transition cluster (HCLN, BATT, ION, HLIT) and uranium exposure (NLR, SASK) position the portfolio for the multi-decade energy infrastructure build-out — a GS-rated <span class="rating-badge rating-ob">OVERWEIGHT</span> theme.
+  <br><br>Crypto (~${cryptoPct.toFixed(0)}%) via ETH, SOL, AAVE signals DeFi/Web3 conviction beyond simple BTC exposure.`;
+  document.getElementById('gsThesis').innerHTML = thesis;
+  document.getElementById('gsDate').textContent = `GS Investment Intelligence · ${new Date().toLocaleDateString('en-CA', {year:'numeric',month:'long',day:'numeric'})}`;
+
+  const goldPrice   = priceMap['GC=F']?.price;
+  const silverPrice = priceMap['SI=F']?.price;
+  const nvdaPrice   = priceMap['NVDA']?.price;
+  const recs = [];
+
+  if (metalsPct > 0) {
+    const gsr = (goldPrice && silverPrice) ? goldPrice / silverPrice : null;
+    recs.push({ type:'rec', title:'OVERWEIGHT — Precious Metals Thesis Intact',
+      body: `${gsr ? `Current Gold/Silver ratio: <strong>${gsr.toFixed(0)}:1</strong>. ` : ''}With central banks net buyers of gold at 40-year highs and real rates potentially peaking, OUNZ and XGD remain core holds. ${gsr && gsr > 80 ? 'Elevated ratio suggests SLV may outperform on a relative basis.' : 'Consider trimming SLV if ratio compresses below 80.'}` });
+  }
+  recs.push({ type:'rec', title:'ADD — Copper Exposure (COPX/ICOP)',
+    body:'Copper demand from EV infrastructure, grid upgrades, and data center buildout is structurally underpinned. AI-driven power consumption surge is a new demand vector not priced in 12 months ago. Current 2-share positions are small — consider building to 5–8 shares each on dips.' });
+  if (uraniumPct < 5) {
+    recs.push({ type:'warning', title:'INCREASE — Uranium (NLR / SASK)',
+      body:'Nuclear energy is experiencing a policy renaissance (SMR approvals, US energy security mandates, European nuclear re-ratings). NLR + SASK combined weight is below 5% — meaningful underweight relative to conviction. SASK is a high-beta uranium explorer; consider adding NLR for quality balance.' });
+  }
+  recs.push({ type:'rec', title:'HOLD — NVDA with Tight Stop',
+    body:`NVIDIA remains the dominant AI infrastructure play. At current AI capex levels, NVDA has near-monopoly pricing power on H100/B200 GPU. ${nvdaPrice ? 'Monitor for earnings guidance disappointments' : 'Consider averaging into weakness'} as the primary risk catalyst.` });
+  recs.push({ type:'warning', title:'REVIEW — Underperforming Thematic ETFs',
+    body:'HCLN, BATT, ION, HLIT have underperformed on higher-for-longer rates. Thesis is intact long-term but may face further headwinds. Hold existing positions given long-dated thesis; no new buying until rate cut cycle is confirmed.' });
+
+  document.getElementById('gsRecs').innerHTML = recs.map(r => `
+    <div class="gs-rec ${r.type === 'warning' ? 'warning' : ''}">
+      <div class="gs-rec-title">${r.title}</div>
+      <div class="gs-rec-body">${r.body}</div>
+    </div>`).join('');
+
+  const risks = [];
+  if (cryptoPct > 8) risks.push({ type:'risk', title:'Crypto Concentration Risk',
+    body:`${cryptoPct.toFixed(1)}% in crypto assets. Volatile, unregulated asset class. Ensure sized to a position you can hold through 60–80% drawdowns.` });
+  risks.push({ type:'warning', title:'USD Exposure',
+    body:'Significant USD-denominated positions (QQQ, NVDA, AMZN, OUNZ, SLV, CIBR) create implicit long-USD risk. CAD/USD weakness benefits these holdings but reversal could compress CAD-denominated portfolio value materially.' });
+  risks.push({ type:'risk', title:'BYND / PSYK — Speculative Tail Risk',
+    body:'Beyond Meat and the Horizons Psychedelic ETF carry near-zero fundamental support near-term. Consider exiting — they add noise to portfolio analysis without meaningful return potential.' });
+
+  document.getElementById('gsRisks').innerHTML = risks.map(r => `
+    <div class="gs-rec ${r.type}">
+      <div class="gs-rec-title">${r.title}</div>
+      <div class="gs-rec-body">${r.body}</div>
+    </div>`).join('');
+}
+
+// ============================================================
+// GS RESEARCH DESK — Equity Screening (Senior Analyst v1.4)
+// Tailored for Kam's profile: TFSA $1,090 + RRSP $1,741 immediate
+// ~$10,000 CAD deployment over 12 months · Low-to-moderate risk · 5–10Y
+// ============================================================
+function renderGSResearchDesk() {
+  const screenedStocks = [
+    {
+      ticker:'RY.TO',   name:'Royal Bank of Canada',       sector:'Financials',
+      rating:'BUY',     moat:'strong',
+      pe:13.2,  sectorPE:14.5,  revenueCAGR5:8.4,
+      debtEquity:1.8,   payoutScore:'A',
+      bullTarget:185,   bearTarget:145,  currentApprox:163,
+      riskScore:3,
+      riskReason:'Dominant Canadian bank with 150+ year dividend streak. Diversified across wealth management, capital markets and retail. Recession risk partially priced. Trades below historical P/B premium.',
+      entryZone:'155–162',  stopLoss:'142',  currency:'CAD',
+      recommendation:'RRSP priority. RY shelters dividends from withholding tax in RRSP. At ~1.9x P/B — a discount to pre-2022 premium — this is a quality entry. Dividend compounding over 5–10 years is the core thesis.',
+    },
+    {
+      ticker:'CNR.TO',  name:'Canadian National Railway',  sector:'Industrials',
+      rating:'BUY',     moat:'strong',
+      pe:21.4,  sectorPE:24.0,  revenueCAGR5:7.2,
+      debtEquity:1.2,   payoutScore:'A',
+      bullTarget:210,   bearTarget:165,  currentApprox:183,
+      riskScore:3,
+      riskReason:'Natural monopoly on eastern Canadian rail. Precision Scheduled Railroading drives industry-leading operating ratios (~60%). Regulated moat, low cyclicality relative to peers.',
+      entryZone:'175–185',  stopLoss:'160',  currency:'CAD',
+      recommendation:'RRSP or TFSA. CNR is a long-duration compounder — rail is the backbone of North American supply chains. Pairs with your existing CJT logistics exposure. Add on dips below $180.',
+    },
+    {
+      ticker:'ENB.TO',  name:'Enbridge Inc.',              sector:'Energy Infrastructure',
+      rating:'BUY',     moat:'strong',
+      pe:18.8,  sectorPE:17.5,  revenueCAGR5:5.1,
+      debtEquity:1.6,   payoutScore:'B+',
+      bullTarget:67,    bearTarget:47,   currentApprox:56,
+      riskScore:4,
+      riskReason:'~7% dividend yield from regulated/contracted pipeline cash flows. Post-acquisition debt load is elevated but manageable given take-or-pay structure. Political and pipeline-expansion regulatory risk.',
+      entryZone:'53–57',    stopLoss:'47',   currency:'CAD',
+      recommendation:'TFSA income layer. 7%+ yield sheltered in TFSA is highly tax-efficient — $1,090 TFSA cash buys ~19 shares yielding ~$76/yr tax-free. Transitional infrastructure bridges your energy thesis.',
+    },
+    {
+      ticker:'BRK-B',   name:'Berkshire Hathaway B',       sector:'Diversified Holdco',
+      rating:'BUY',     moat:'strong',
+      pe:22.1,  sectorPE:20.0,  revenueCAGR5:6.8,
+      debtEquity:0.3,   payoutScore:'A',
+      bullTarget:570,   bearTarget:420,  currentApprox:490,
+      riskScore:3,
+      riskReason:'$300B+ cash position creates antifragile optionality in a downturn. Insurance float funding is a structural competitive advantage. Berkshire pays no dividend — no US withholding in RRSP.',
+      entryZone:'475–495',  stopLoss:'440',  currency:'USD',
+      recommendation:'RRSP stability anchor. BRK-B in RRSP = zero US withholding (no dividend paid). Perfect counterweight to your volatile thematic ETFs. Buffett\'s cash hoard positions it to deploy aggressively in a correction.',
+    },
+    {
+      ticker:'MSFT',    name:'Microsoft Corporation',      sector:'Technology',
+      rating:'BUY',     moat:'strong',
+      pe:31.2,  sectorPE:38.0,  revenueCAGR5:14.8,
+      debtEquity:0.4,   payoutScore:'A+',
+      bullTarget:580,   bearTarget:380,  currentApprox:420,
+      riskScore:4,
+      riskReason:'Azure cloud (#2 globally), AI via Copilot + OpenAI partnership, Office 365 with near-100% enterprise renewal. 31x forward P/E is a discount to mega-cap tech peers. Key risks: antitrust review and OpenAI equity dependency.',
+      entryZone:'400–420',  stopLoss:'360',  currency:'USD',
+      recommendation:'TFSA. You hold 1 share — add on weakness. MSFT is the most defensible AI infrastructure play given enterprise switching costs. With your ~$638 USD TFSA cash, you can add 1 share at current prices.',
+    },
+    {
+      ticker:'CCO.TO',  name:'Cameco Corporation',         sector:'Uranium/Nuclear',
+      rating:'BUY',     moat:'moderate',
+      pe:58.0,  sectorPE:35.0,  revenueCAGR5:11.2,
+      debtEquity:0.3,   payoutScore:'B',
+      bullTarget:85,    bearTarget:45,   currentApprox:63,
+      riskScore:6,
+      riskReason:'World\'s largest public uranium producer. Nuclear renaissance driven by AI data-center power demand and EU/US energy security policy. High P/E reflects growth expectations; McArthur River ramp-up execution is key risk.',
+      entryZone:'58–65',    stopLoss:'50',   currency:'CAD',
+      recommendation:'TFSA. Blue-chip way to amplify your existing NLR + SASK uranium thesis with a quality operator. CCO offers production exposure without junior explorer risk. Consider 2–3 shares as a satellite position.',
+    },
+    {
+      ticker:'PANW',    name:'Palo Alto Networks',         sector:'Cybersecurity',
+      rating:'BUY',     moat:'strong',
+      pe:52.0,  sectorPE:45.0,  revenueCAGR5:23.4,
+      debtEquity:0.8,   payoutScore:'N/A',
+      bullTarget:260,   bearTarget:155,  currentApprox:195,
+      riskScore:5,
+      riskReason:'Platformization strategy differentiates PANW from point-solution competitors. AI-native security is a structural tailwind. Premium valuation, but RPO growth and billings expansion justify. Macro-insensitive spending category.',
+      entryZone:'180–200',  stopLoss:'165',  currency:'USD',
+      recommendation:'TFSA. Upgrades your existing CIBR ETF cybersecurity thesis with category-leader single-name exposure. PANW is consolidating market share rapidly. Current price is within the entry zone — watch for pullbacks.',
+    },
+    {
+      ticker:'TFII.TO', name:'TFI International Inc.',     sector:'Transportation',
+      rating:'BUY',     moat:'moderate',
+      pe:16.8,  sectorPE:19.5,  revenueCAGR5:18.2,
+      debtEquity:0.9,   payoutScore:'A-',
+      bullTarget:200,   bearTarget:125,  currentApprox:155,
+      riskScore:5,
+      riskReason:'Canadian logistics champion with disciplined M&A track record under CEO Alain Bédard. Cyclically exposed to North American freight volumes. Integration risk on recent acquisitions is manageable given history.',
+      entryZone:'145–160',  stopLoss:'130',  currency:'CAD',
+      recommendation:'TFSA Canadian allocation. Complements your existing CJT.TO position. TFII trades at P/E discount to US logistics peers despite superior growth trajectory. Strong buy on freight cycle troughs.',
+    },
+    {
+      ticker:'PLTR',    name:'Palantir Technologies',      sector:'AI / Data Analytics',
+      rating:'HOLD',    moat:'moderate',
+      pe:195.0, sectorPE:45.0,  revenueCAGR5:22.1,
+      debtEquity:0.0,   payoutScore:'N/A',
+      bullTarget:150,   bearTarget:55,   currentApprox:95,
+      riskScore:8,
+      riskReason:'Re-rated aggressively on US government AI spending tailwinds. Commercial segment accelerating. P/E of 195x leaves no margin for error. Retail-driven positioning creates sharp drawdown risk.',
+      entryZone:'70–85',    stopLoss:'60',   currency:'USD',
+      recommendation:'Small speculative position only (< 5% of portfolio). Given your $10K/yr deployment budget, limit to 1–2 shares. Wait for pullback to $70–85 entry zone. PLTR fits the high-growth satellite sleeve, not the core.',
+    },
+    {
+      ticker:'WMT',     name:'Walmart Inc.',               sector:'Consumer Staples',
+      rating:'HOLD',    moat:'strong',
+      pe:35.2,  sectorPE:22.0,  revenueCAGR5:5.4,
+      debtEquity:0.6,   payoutScore:'A',
+      bullTarget:115,   bearTarget:80,   currentApprox:96,
+      riskScore:3,
+      riskReason:'Re-rated as a tech/advertising business via Walmart Connect ad platform + Flipkart optionality. P/E premium to consumer staples peers is defensible. Recession-resilient consumer staples core. Dividend aristocrat.',
+      entryZone:'88–98',    stopLoss:'80',   currency:'USD',
+      recommendation:'RRSP defensive. WMT at 35x is not cheap, but the advertising re-rating story is early innings. Small starter position; full commitment if pulls back to $88. Adds stability ballast against your volatile thematic sleeve.',
+    },
+  ];
+
+  const container = document.getElementById('researchDesk');
+  if (!container) return;
+
+  const mandate = `<div class="research-mandate">
+    <strong style="color:var(--gold-light)">Analyst Mandate:</strong> Senior Equity Analyst, GS Private Wealth Management &nbsp;·&nbsp;
+    <strong style="color:var(--gold-light)">Client:</strong> Kam Dhanani &nbsp;·&nbsp;
+    <strong style="color:var(--gold-light)">Immediate Capital:</strong> TFSA $1,090 CAD / RRSP $1,741 CAD / Crypto $367 CAD &nbsp;·&nbsp;
+    <strong style="color:var(--gold-light)">12-Month Deployment:</strong> ~$10,000 CAD &nbsp;·&nbsp;
+    <strong style="color:var(--gold-light)">Risk:</strong> Low-to-Moderate &nbsp;·&nbsp;
+    <strong style="color:var(--gold-light)">Horizon:</strong> 5–10 Years
+    <br><br>
+    The following 10 equities were screened from a universe of 2,400+ securities against GS proprietary quality, momentum, and valuation filters. Each recommendation accounts for existing portfolio exposures (VFV, XUU, QQQ, NVDA, NLR, SASK, ETH, SOL, AAVE and 25+ other positions) to minimize redundancy. Account-level placement guidance reflects Canadian tax-sheltering strategy (TFSA tax-free growth, RRSP US-dividend withholding exemption).
+  </div>`;
+
+  // Summary screening table
+  let tableHTML = `<div class="research-table-wrapper">
+    <table class="research-table">
+      <thead>
+        <tr>
+          <th>Ticker</th>
+          <th>Company</th>
+          <th>Sector</th>
+          <th>Rating</th>
+          <th>P/E (Sect.)</th>
+          <th>Rev CAGR 5Y</th>
+          <th>D/E</th>
+          <th>Moat</th>
+          <th>Bull / Bear 12M</th>
+          <th>Risk /10</th>
+          <th>Entry Zone</th>
+          <th>Stop Loss</th>
+        </tr>
+      </thead>
+      <tbody>`;
+
+  screenedStocks.forEach(s => {
+    const ratingCls = s.rating === 'BUY' ? 'rating-ob' : s.rating === 'HOLD' ? 'rating-n' : 'rating-uw';
+    const moatCls   = s.moat === 'strong' ? 'moat-strong' : s.moat === 'moderate' ? 'moat-moderate' : 'moat-weak';
+    const riskCls   = s.riskScore <= 3 ? 'risk-1to3' : s.riskScore <= 6 ? 'risk-4to6' : 'risk-7to10';
+    const curr      = s.currency === 'CAD' ? 'C$' : 'US$';
+    const peHtml    = s.pe < s.sectorPE
+      ? `<span class="positive">${s.pe.toFixed(1)}</span> <span style="color:var(--text-muted);font-size:10px">(${s.sectorPE.toFixed(1)})</span>`
+      : `<span style="color:var(--text-secondary)">${s.pe.toFixed(1)}</span> <span style="color:var(--text-muted);font-size:10px">(${s.sectorPE.toFixed(1)})</span>`;
+    tableHTML += `<tr>
+      <td style="font-weight:800;color:var(--text-primary)">${s.ticker}</td>
+      <td style="font-size:11px;color:var(--text-secondary)">${s.name}</td>
+      <td style="font-size:10px;color:var(--text-muted)">${s.sector}</td>
+      <td><span class="rating-badge ${ratingCls}">${s.rating}</span></td>
+      <td>${peHtml}</td>
+      <td class="${s.revenueCAGR5 > 10 ? 'positive' : 'neutral'}">${s.revenueCAGR5.toFixed(1)}%</td>
+      <td style="color:${s.debtEquity > 1.5 ? 'var(--gold)' : 'var(--text-secondary)'}">${s.debtEquity.toFixed(1)}x</td>
+      <td><span class="moat-badge ${moatCls}">${s.moat.toUpperCase()}</span></td>
+      <td><span class="bull-target">${curr}${s.bullTarget}</span> / <span class="bear-target">${curr}${s.bearTarget}</span></td>
+      <td><span class="risk-score ${riskCls}">${s.riskScore}</span></td>
+      <td style="font-size:11px;color:var(--gold-light)">${curr}${s.entryZone}</td>
+      <td style="font-size:11px;color:var(--red)">${curr}${s.stopLoss}</td>
+    </tr>`;
+  });
+  tableHTML += `</tbody></table></div>`;
+
+  // Deep-dive cards for top 5 picks
+  let detailCards = `<div class="gs-section-title" style="margin-bottom:14px;">📋 Deep Dive — Top 5 Priority Recommendations</div>
+    <div class="research-stock-details">`;
+
+  screenedStocks.slice(0, 5).forEach(s => {
+    const curr    = s.currency === 'CAD' ? 'C$' : 'US$';
+    const upside  = ((s.bullTarget  - s.currentApprox) / s.currentApprox * 100).toFixed(0);
+    const downside= ((s.bearTarget  - s.currentApprox) / s.currentApprox * 100).toFixed(0);
+    const ratingCls = s.rating === 'BUY' ? 'rating-ob' : 'rating-n';
+    const moatCls   = s.moat === 'strong' ? 'moat-strong' : s.moat === 'moderate' ? 'moat-moderate' : 'moat-weak';
+    const riskCls   = s.riskScore <= 3 ? 'risk-1to3' : s.riskScore <= 6 ? 'risk-4to6' : 'risk-7to10';
+    detailCards += `<div class="research-stock-card">
+      <div class="research-stock-ticker">${s.ticker} <span class="rating-badge ${ratingCls}">${s.rating}</span></div>
+      <div class="research-stock-name">${s.name} · ${s.sector}</div>
+      <div class="research-detail-row">
+        <span class="research-detail-label">Approx. Price (Mar 2026)</span>
+        <span class="research-detail-value">${curr}${s.currentApprox}</span>
+      </div>
+      <div class="research-detail-row">
+        <span class="research-detail-label">12M Bull / Bear Target</span>
+        <span class="research-detail-value">
+          <span class="bull-target">${curr}${s.bullTarget} (+${upside}%)</span> /
+          <span class="bear-target">${curr}${s.bearTarget} (${downside}%)</span>
+        </span>
+      </div>
+      <div class="research-detail-row">
+        <span class="research-detail-label">P/E vs Sector Avg</span>
+        <span class="research-detail-value">${s.pe.toFixed(1)}x vs ${s.sectorPE.toFixed(1)}x</span>
+      </div>
+      <div class="research-detail-row">
+        <span class="research-detail-label">Revenue CAGR (5Y)</span>
+        <span class="research-detail-value ${s.revenueCAGR5 > 10 ? 'positive' : ''}">${s.revenueCAGR5.toFixed(1)}%</span>
+      </div>
+      <div class="research-detail-row">
+        <span class="research-detail-label">Debt / Equity · Payout Score</span>
+        <span class="research-detail-value">${s.debtEquity.toFixed(1)}x · ${s.payoutScore}</span>
+      </div>
+      <div class="research-detail-row">
+        <span class="research-detail-label">Competitive Moat</span>
+        <span class="research-detail-value"><span class="moat-badge ${moatCls}">${s.moat.toUpperCase()}</span></span>
+      </div>
+      <div class="research-detail-row">
+        <span class="research-detail-label">Risk Score</span>
+        <span class="research-detail-value"><span class="risk-score ${riskCls}">${s.riskScore}</span> /10</span>
+      </div>
+      <div class="research-detail-row">
+        <span class="research-detail-label">Entry Zone / Stop Loss</span>
+        <span class="research-detail-value" style="color:var(--gold-light)">${curr}${s.entryZone} / <span style="color:var(--red)">${curr}${s.stopLoss}</span></span>
+      </div>
+      <div style="margin-top:10px;font-size:11px;color:var(--text-secondary);line-height:1.6;border-top:1px solid var(--border);padding-top:8px">
+        <span style="color:var(--gold-dim);font-weight:700;">Risk Rationale:</span> ${s.riskReason}
+      </div>
+      <div style="margin-top:8px;font-size:11px;color:var(--gold-light);line-height:1.6;background:rgba(201,168,76,0.06);padding:8px;border-radius:4px">
+        <strong>GS Desk:</strong> ${s.recommendation}
+      </div>
+    </div>`;
+  });
+  detailCards += `</div>`;
+
+  const disclaimer = `<div class="research-disclaimer">
+    ⚠️ <strong>Research Disclaimer:</strong> This equity screening report is generated for informational and educational purposes only. Price targets, fundamental data, and analyst ratings are approximations as of March 2026 and are subject to change without notice. This output does not constitute personalised financial advice. All investments carry risk of capital loss including total loss of principal. Past performance is not indicative of future results. Consult a registered investment advisor or Portfolio Manager before making investment decisions. Data sourced from public filings, Bloomberg consensus estimates, and Yahoo Finance.
+  </div>`;
+
+  container.innerHTML = `
+    <div class="research-desk-header">
+      <span class="gs-badge">GS</span>
+      <div>
+        <div class="gs-label">Equity Research Desk — Top 10 Screened Opportunities</div>
+        <div class="gs-analyst">Senior Analyst, GS Private Wealth · March 2026 · Low-to-Moderate Risk · 5–10 Year Horizon</div>
+      </div>
+    </div>
+    ${mandate}
+    ${tableHTML}
+    ${detailCards}
+    ${disclaimer}
+  `;
+}
+
+// ============================================================
+// FETCH: News
+// ============================================================
+const NEWS_PROXIES = [
+  (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+  (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+  (url) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+];
+
+async function fetchWithFallback(targetUrl) {
+  if (window.location.protocol === 'https:') {
+    try { const r = await fetch(targetUrl, {cache:'no-store'}); if (r.ok) return r; } catch(_) {}
+  }
+  for (const makeProxy of NEWS_PROXIES) {
+    try { const r = await fetch(makeProxy(targetUrl), {cache:'no-store'}); if (r.ok) return r; } catch(_) {}
+  }
+  throw new Error('All proxies failed');
+}
+
+async function fetchNewsSection(query, containerId, limit=10) {
+  // Fetch more items from RSS so we can filter for recency and still fill the panel
+  const rssUrl = `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=en&gl=US&ceid=US:en`;
+  const el = document.getElementById(containerId);
+  const timeEl = document.getElementById(containerId + 'Time');
+  try {
+    const res  = await fetchWithFallback(rssUrl);
+    const text = await res.text();
+    const xml  = new DOMParser().parseFromString(text, 'text/xml');
+    const allItems = Array.from(xml.querySelectorAll('item'));
+    if (!allItems.length) throw new Error('No items');
+
+    const now = new Date();
+    const HOURS_48 = 48 * 3600 * 1000;
+    const HOURS_24 = 24 * 3600 * 1000;
+
+    // Parse and attach dates
+    const parsed = allItems.map(item => {
+      const title   = item.querySelector('title')?.textContent || '';
+      const link    = item.querySelector('link')?.textContent || '#';
+      const pubDate = item.querySelector('pubDate')?.textContent || '';
+      const source  = item.querySelector('source')?.textContent || 'News';
+      const date    = pubDate ? new Date(pubDate) : null;
+      const ageMs   = date ? now - date : Infinity;
+      return { title, link, source, date, ageMs };
+    });
+
+    // Sort by most recent first, then cap at limit
+    parsed.sort((a, b) => a.ageMs - b.ageMs);
+    const shown = parsed.slice(0, limit);
+
+    let html = '';
+    shown.forEach(item => {
+      const cleanTitle = item.title.replace(/ - [^-]+$/, '');
+      const timeStr    = item.date ? getTimeAgo(item.date) : '';
+      const fullTime   = item.date ? item.date.toLocaleString('en-CA', {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'}) : '';
+
+      // Age badge
+      let badgeClass = 'news-age-old', badgeText = '';
+      if (item.ageMs < 3600000) {
+        badgeClass = 'news-age-fresh'; badgeText = 'LIVE';
+      } else if (item.ageMs < HOURS_24) {
+        badgeClass = 'news-age-fresh'; badgeText = 'TODAY';
+      } else if (item.ageMs < HOURS_48) {
+        badgeClass = 'news-age-recent'; badgeText = 'YESTERDAY';
+      }
+
+      // Dim articles older than 48h
+      const staleClass = item.ageMs > HOURS_48 ? ' news-stale' : '';
+
+      html += `<div class="news-item${staleClass}" onclick="window.open('${item.link}','_blank')" title="${fullTime}">
+        <div class="news-headline">${cleanTitle}</div>
+        <div class="news-meta">
+          ${badgeText ? `<span class="news-age-badge ${badgeClass}">${badgeText}</span>` : ''}
+          <span class="news-source">${item.source}</span>
+          <span>· ${timeStr}</span>
+        </div>
+      </div>`;
+    });
+
+    el.innerHTML = html || '<div class="news-placeholder">No recent news found.</div>';
+    if (timeEl) timeEl.textContent = 'as of ' + now.toLocaleTimeString('en-CA', {hour:'2-digit', minute:'2-digit'});
+  } catch(e) {
+    el.innerHTML = `<div class="news-placeholder">News unavailable. <a href="https://news.google.com/search?q=${encodeURIComponent(query)}" target="_blank" style="color:var(--gold)">Search Google News →</a></div>`;
+  }
+}
+
+function getTimeAgo(date) {
+  const s = Math.floor((new Date() - date) / 1000);
+  if (s < 60)    return 'Just now';
+  if (s < 3600)  return Math.floor(s / 60) + 'm ago';
+  if (s < 86400) return Math.floor(s / 3600) + 'h ago';
+  return Math.floor(s / 86400) + 'd ago';
+}
+
+// ============================================================
+// FILTER HANDLERS
+// ============================================================
+function filterHoldings(filter, btn) {
+  currentFilter = filter;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderHoldings();
+}
+
+function filterPeriod(period, btn) {
+  currentPeriod = period;
+  document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  if (period !== 'today' && !historicalFetched) {
+    fetchHistoricalForPeriods().then(() => renderHoldings());
+  } else {
+    renderHoldings();
+  }
+}
+
+// ============================================================
+// MAIN REFRESH
+// ============================================================
+async function refreshAll() {
+  const loading = document.getElementById('loadingIndicator');
+  loading.style.display = 'flex';
+  try {
+    await Promise.allSettled([
+      fetchAllPrices(),
+      fetchCryptoPrices(),
+    ]);
+    renderSummary();
+    renderUndeployedCapital();
+    renderCurrencySplit();
+    renderHoldings();
+    renderChart();
+    renderMacro();
+    renderGSAnalysis();
+    renderGSResearchDesk();
+    // News — async, non-blocking
+    fetchNewsSection('gold silver precious metals central bank site:bloomberg.com OR site:reuters.com OR site:ft.com OR site:economist.com OR site:wsj.com', 'newsMetals');
+    fetchNewsSection('bitcoin ethereum crypto DeFi Solana site:bloomberg.com OR site:reuters.com OR site:ft.com OR site:coindesk.com OR site:wsj.com', 'newsCrypto');
+    fetchNewsSection('uranium nuclear energy copper lithium battery site:bloomberg.com OR site:reuters.com OR site:ft.com OR site:economist.com OR site:wsj.com', 'newsEnergy');
+    const now = new Date().toLocaleString('en-CA', {timeStyle:'short', dateStyle:'medium'});
+    document.getElementById('lastUpdated').textContent = 'Updated: ' + now;
+    document.getElementById('footerTime').textContent  = now;
+  } finally {
+    loading.style.display = 'none';
+  }
+}
+
+// ============================================================
+// INIT
+// ============================================================
+document.addEventListener('DOMContentLoaded', () => {
+  if (window.location.protocol === 'file:') {
+    document.getElementById('localFileBanner').style.display = 'block';
+  }
+  renderGSAnalysis();
+  renderGSResearchDesk();
+  renderUndeployedCapital();
+  refreshAll();
+});
+</script>
+</body>
+</html>
