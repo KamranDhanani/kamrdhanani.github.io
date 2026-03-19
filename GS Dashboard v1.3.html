@@ -364,9 +364,22 @@
     .news-item:last-child { border-bottom: none; }
     .news-item:hover .news-headline { color: var(--gold-light); }
     .news-headline { font-size: 12px; color: var(--text-primary); line-height: 1.5; margin-bottom: 4px; transition: color 0.2s; }
-    .news-meta { font-size: 10px; color: var(--text-muted); }
+    .news-meta { font-size: 10px; color: var(--text-muted); display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
     .news-source { color: var(--gold-dim); font-weight: 600; }
+    .news-age-badge {
+      font-size: 9px;
+      font-weight: 700;
+      padding: 1px 5px;
+      border-radius: 3px;
+      letter-spacing: 0.5px;
+    }
+    .news-age-fresh  { background: #0d3321; color: var(--green); }
+    .news-age-recent { background: #1a1200; color: var(--gold); }
+    .news-age-old    { background: #1a1a1a; color: var(--text-muted); }
+    .news-stale { opacity: 0.55; }
     .news-placeholder { color: var(--text-muted); font-size: 12px; font-style: italic; padding: 12px 0; }
+    .news-feed-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
+    .news-refresh-time { font-size:9px; color:var(--text-muted); font-style:italic; }
     /* FOOTER */
     .footer {
       text-align: center;
@@ -587,20 +600,23 @@
   <div class="section-title">Market Intelligence</div>
   <div class="news-grid">
     <div class="news-feed">
-      <div class="card-header" style="margin-bottom:12px;">
+      <div class="news-feed-header">
         <div style="font-size:12px;font-weight:700;color:var(--gold)">🥇 Precious Metals & Macro</div>
+        <span class="news-refresh-time" id="newsMetalsTime"></span>
       </div>
       <div id="newsMetals"><div class="news-placeholder">Loading news...</div></div>
     </div>
     <div class="news-feed">
-      <div class="card-header" style="margin-bottom:12px;">
+      <div class="news-feed-header">
         <div style="font-size:12px;font-weight:700;color:var(--gold)">₿ Crypto & Digital Assets</div>
+        <span class="news-refresh-time" id="newsCryptoTime"></span>
       </div>
       <div id="newsCrypto"><div class="news-placeholder">Loading news...</div></div>
     </div>
     <div class="news-feed">
-      <div class="card-header" style="margin-bottom:12px;">
+      <div class="news-feed-header">
         <div style="font-size:12px;font-weight:700;color:var(--gold)">⚡ Energy & Resources</div>
+        <span class="news-refresh-time" id="newsEnergyTime"></span>
       </div>
       <div id="newsEnergy"><div class="news-placeholder">Loading news...</div></div>
     </div>
@@ -1320,28 +1336,68 @@ async function fetchWithFallback(targetUrl) {
   throw new Error('All proxies failed');
 }
 
-async function fetchNewsSection(query, containerId, limit=6) {
+async function fetchNewsSection(query, containerId, limit=10) {
+  // Fetch more items from RSS so we can filter for recency and still fill the panel
   const rssUrl = `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=en&gl=US&ceid=US:en`;
   const el = document.getElementById(containerId);
+  const timeEl = document.getElementById(containerId + 'Time');
   try {
     const res  = await fetchWithFallback(rssUrl);
     const text = await res.text();
     const xml  = new DOMParser().parseFromString(text, 'text/xml');
-    const items = xml.querySelectorAll('item');
-    if (!items.length) throw new Error('No items');
-    let html = '';
-    Array.from(items).slice(0, limit).forEach(item => {
+    const allItems = Array.from(xml.querySelectorAll('item'));
+    if (!allItems.length) throw new Error('No items');
+
+    const now = new Date();
+    const HOURS_48 = 48 * 3600 * 1000;
+    const HOURS_24 = 24 * 3600 * 1000;
+
+    // Parse and attach dates
+    const parsed = allItems.map(item => {
       const title   = item.querySelector('title')?.textContent || '';
       const link    = item.querySelector('link')?.textContent || '#';
       const pubDate = item.querySelector('pubDate')?.textContent || '';
       const source  = item.querySelector('source')?.textContent || 'News';
-      const timeAgo = pubDate ? getTimeAgo(new Date(pubDate)) : '';
-      html += `<div class="news-item" onclick="window.open('${link}','_blank')">
-        <div class="news-headline">${title.replace(/ - [^-]+$/, '')}</div>
-        <div class="news-meta"><span class="news-source">${source}</span> · ${timeAgo}</div>
+      const date    = pubDate ? new Date(pubDate) : null;
+      const ageMs   = date ? now - date : Infinity;
+      return { title, link, source, date, ageMs };
+    });
+
+    // Sort by most recent first, then cap at limit
+    parsed.sort((a, b) => a.ageMs - b.ageMs);
+    const shown = parsed.slice(0, limit);
+
+    let html = '';
+    shown.forEach(item => {
+      const cleanTitle = item.title.replace(/ - [^-]+$/, '');
+      const timeStr    = item.date ? getTimeAgo(item.date) : '';
+      const fullTime   = item.date ? item.date.toLocaleString('en-CA', {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'}) : '';
+
+      // Age badge
+      let badgeClass = 'news-age-old', badgeText = '';
+      if (item.ageMs < 3600000) {
+        badgeClass = 'news-age-fresh'; badgeText = 'LIVE';
+      } else if (item.ageMs < HOURS_24) {
+        badgeClass = 'news-age-fresh'; badgeText = 'TODAY';
+      } else if (item.ageMs < HOURS_48) {
+        badgeClass = 'news-age-recent'; badgeText = 'YESTERDAY';
+      }
+
+      // Dim articles older than 48h
+      const staleClass = item.ageMs > HOURS_48 ? ' news-stale' : '';
+
+      html += `<div class="news-item${staleClass}" onclick="window.open('${item.link}','_blank')" title="${fullTime}">
+        <div class="news-headline">${cleanTitle}</div>
+        <div class="news-meta">
+          ${badgeText ? `<span class="news-age-badge ${badgeClass}">${badgeText}</span>` : ''}
+          <span class="news-source">${item.source}</span>
+          <span>· ${timeStr}</span>
+        </div>
       </div>`;
     });
-    el.innerHTML = html || '<div class="news-placeholder">No news found.</div>';
+
+    el.innerHTML = html || '<div class="news-placeholder">No recent news found.</div>';
+    if (timeEl) timeEl.textContent = 'as of ' + now.toLocaleTimeString('en-CA', {hour:'2-digit', minute:'2-digit'});
   } catch(e) {
     el.innerHTML = `<div class="news-placeholder">News unavailable. <a href="https://news.google.com/search?q=${encodeURIComponent(query)}" target="_blank" style="color:var(--gold)">Search Google News →</a></div>`;
   }
@@ -1349,10 +1405,10 @@ async function fetchNewsSection(query, containerId, limit=6) {
 
 function getTimeAgo(date) {
   const s = Math.floor((new Date() - date) / 1000);
-  if (s < 60) return 'Just now';
-  if (s < 3600) return Math.floor(s/60) + 'm ago';
-  if (s < 86400) return Math.floor(s/3600) + 'h ago';
-  return Math.floor(s/86400) + 'd ago';
+  if (s < 60)    return 'Just now';
+  if (s < 3600)  return Math.floor(s / 60) + 'm ago';
+  if (s < 86400) return Math.floor(s / 3600) + 'h ago';
+  return Math.floor(s / 86400) + 'd ago';
 }
 
 // ============================================================
