@@ -995,19 +995,18 @@ function getHoldingValue(h) {
 }
 
 // ============================================================
-// FETCH: Yahoo Finance Chart API — 3-proxy fallback chain
-// FIX: Previously only tried corsproxy.io with no fallback.
-//      If corsproxy.io is rate-limited all prices fail.
-//      Now tries allorigins.win and codetabs.com as backups.
+// FETCH: Yahoo Finance Chart API — 4-proxy fallback chain
 // ============================================================
+const YAHOO_PROXIES = (url) => [
+  `https://corsproxy.io/?${encodeURIComponent(url)}`,
+  `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+  `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+  `https://thingproxy.freeboard.io/fetch/${url}`,
+];
+
 async function fetchYahooChart(symbol) {
   const url = `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=2d&includePrePost=false`;
-  const proxies = [
-    `https://corsproxy.io/?${encodeURIComponent(url)}`,
-    `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-    `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
-  ];
-  for (const proxyUrl of proxies) {
+  for (const proxyUrl of YAHOO_PROXIES(url)) {
     try {
       const res = await fetch(proxyUrl, { cache:'no-store' });
       if (!res.ok) continue;
@@ -1026,23 +1025,50 @@ async function fetchYahooChart(symbol) {
 }
 
 // ============================================================
-// FETCH: All prices — holdings + macro in one batched flow
-// FIX: Replaced Stooq (no prevClose = no day change on macro) with Yahoo Finance.
-//      All macro tickers now fetched via fetchYahooChart for consistency + prevClose support.
+// FETCH: Macro indicators — single batch call via v7/quote API
+// ============================================================
+async function fetchMacroBatch() {
+  const syms = MACRO_ONLY_SYMBOLS.join(',');
+  const url  = `https://query2.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(syms)}`;
+  for (const proxyUrl of YAHOO_PROXIES(url)) {
+    try {
+      const res = await fetch(proxyUrl, { cache:'no-store' });
+      if (!res.ok) continue;
+      const data = await res.json();
+      const results = data?.quoteResponse?.result;
+      if (!results?.length) continue;
+      results.forEach(q => {
+        if (q.regularMarketPrice != null) {
+          priceMap[q.symbol] = {
+            price:     q.regularMarketPrice,
+            prevClose: q.regularMarketPreviousClose ?? null,
+            currency:  q.currency ?? 'USD',
+          };
+        }
+      });
+      const fx = priceMap['USDCAD=X'];
+      if (fx?.price) usdcadRate = fx.price;
+      return true;
+    } catch(_) {}
+  }
+  await Promise.allSettled(MACRO_ONLY_SYMBOLS.map(sym => fetchYahooChart(sym)));
+  return false;
+}
+
+// ============================================================
+// FETCH: All prices — macros first, then holdings
 // ============================================================
 async function fetchAllPrices() {
-  // Deduplicate holding symbols
-  const holdingSymbols = [...new Set(HOLDINGS.filter(h => h.yahoo).map(h => h.yahoo))];
-  // Combine with macro-only symbols (GC=F, BTC-CAD, etc.)
-  const allSymbols = [...new Set([...holdingSymbols, ...MACRO_ONLY_SYMBOLS])];
+  // Step 1: All 8 macro indicators in ONE API call
+  await fetchMacroBatch();
 
-  // Fetch in parallel batches of 8 to avoid overwhelming proxies
-  for (let i = 0; i < allSymbols.length; i += 8) {
-    const batch = allSymbols.slice(i, i + 8);
+  // Step 2: Holdings in smaller batches of 6
+  const holdingSymbols = [...new Set(HOLDINGS.filter(h => h.yahoo).map(h => h.yahoo))];
+  for (let i = 0; i < holdingSymbols.length; i += 6) {
+    const batch = holdingSymbols.slice(i, i + 6);
     await Promise.allSettled(batch.map(sym => fetchYahooChart(sym)));
   }
 
-  // Update live USD/CAD rate
   const usdcad = priceMap['USDCAD=X'];
   if (usdcad?.price) usdcadRate = usdcad.price;
 }
@@ -1106,13 +1132,7 @@ async function fetchCryptoPrices() {
 // ============================================================
 async function fetchYahooHistory(symbol) {
   const url = `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1y`;
-  const proxies = [
-    `https://corsproxy.io/?${encodeURIComponent(url)}`,
-    `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-    `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
-  ];
-
-  for (const proxyUrl of proxies) {
+  for (const proxyUrl of YAHOO_PROXIES(url)) {
     try {
       const res = await fetch(proxyUrl, { cache:'no-store' });
       if (!res.ok) continue;
@@ -1989,6 +2009,7 @@ const NEWS_PROXIES = [
   (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
   (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
   (url) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+  (url) => `https://thingproxy.freeboard.io/fetch/${url}`,
 ];
 
 async function fetchWithFallback(targetUrl) {
